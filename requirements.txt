@@ -1,0 +1,6 @@
+aiogram
+pyrogram
+ntgcalls
+python-dotenv
+yt-dlp
+spotipy
