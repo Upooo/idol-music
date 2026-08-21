@@ -1,0 +1,10 @@
+.env
+src/cookies/
+*.session
+*.session-journal
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+.vscode/
