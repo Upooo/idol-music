@@ -6,7 +6,8 @@ Starts both Pyrogram clients (bot + assistant) and PyTgCalls.
 import asyncio
 import logging
 
-from pytgcalls.types import Update
+from pytgcalls import filters as pf
+from pytgcalls.types import ChatUpdate, StreamEnded, Update
 
 from bot.clients import bot, assistant, calls
 from music.manager import SessionManager
@@ -22,27 +23,17 @@ log = logging.getLogger(__name__)
 async def main() -> None:
     sessions = SessionManager(calls)
 
-    # Register stream-ended callback (PyTgCalls 2.x API)
-    @calls.on_update(filters=None)
-    async def on_update(client: PyTgCalls, update: Update):
-        # PyTgCalls 2.x fires Update with status for stream events
-        # We check for stream end status
-        if hasattr(update, 'chat_id') and hasattr(update, 'status'):
-            from pytgcalls.types import ChatUpdate
-            if isinstance(update, ChatUpdate):
-                from pytgcalls.types import ChatUpdate as CU
-                if update.status == CU.Status.CLOSED_VOICE_CHAT:
-                    log.info("VC closed in %d", update.chat_id)
-                    sess = sessions.get(update.chat_id)
-                    await sess.stop()
-                    sessions.remove(update.chat_id)
-                elif update.status == CU.Status.PAUSED_STREAM:
-                    pass  # handled by player
-                elif update.status == CU.Status.RESUMED_STREAM:
-                    pass  # handled by player
+    # Handle voice-chat closure (e.g. VC ended by an admin)
+    @calls.on_update(filters=pf.chat_update(ChatUpdate.Status.CLOSED_VOICE_CHAT))
+    async def on_vc_closed(client, update: ChatUpdate):
+        log.info("VC closed in %d", update.chat_id)
+        sess = sessions.get(update.chat_id)
+        await sess.stop()
+        sessions.remove(update.chat_id)
 
-    @calls.on_stream_end()
-    async def on_stream_end(client, update):
+    # Handle stream-ended events (track finished playing)
+    @calls.on_update(filters=pf.stream_end())
+    async def on_stream_end(client, update: StreamEnded):
         chat_id = update.chat_id
         log.info("Stream ended in %d", chat_id)
         sess = sessions.get(chat_id)

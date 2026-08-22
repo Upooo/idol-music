@@ -1,6 +1,6 @@
 pyrogram>=2.0
 tgcrypto
-py-tgcalls>=2.0
+py-tgcalls==2.3.3
 python-dotenv
 yt-dlp
 aiosqlite
