@@ -4,3 +4,4 @@ py-tgcalls==2.3.3
 python-dotenv
 yt-dlp
 aiosqlite
+aiohttp
