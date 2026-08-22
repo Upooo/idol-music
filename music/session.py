@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from typing import TYPE_CHECKING
 
-from pytgcalls import PyTgCalls
+if TYPE_CHECKING:
+    from pytgcalls import PyTgCalls
 
 from music.player import Player
 from music.track import Track

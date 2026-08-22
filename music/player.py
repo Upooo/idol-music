@@ -1,4 +1,4 @@
-"""Player — abstraction over PyTgCalls for one group.
+"""Player — abstraction over PyTgCalls 2.x for one group.
 
 Handles: join, play, pause, resume, stop, leave.
 Emits stream_ended callback so the session can advance the queue.
@@ -10,7 +10,7 @@ import logging
 from typing import Callable, Awaitable
 
 from pytgcalls import PyTgCalls
-from pytgcalls.types import AudioPiped
+from pytgcalls.types import MediaStream
 
 from music.track import Track
 
@@ -42,7 +42,10 @@ class Player:
         try:
             await self._calls.play(
                 self.chat_id,
-                AudioPiped(track.url),
+                MediaStream(
+                    track.url,
+                    video_flags=MediaStream.Flags.IGNORE,
+                ),
             )
             log.info("Playing: %s in %d", track.title, self.chat_id)
         except Exception as e:
@@ -54,13 +57,13 @@ class Player:
     async def pause(self) -> None:
         if not self.is_playing or self.is_paused:
             return
-        await self._calls.pause_stream(self.chat_id)
+        await self._calls.pause(self.chat_id)
         self.is_paused = True
 
     async def resume(self) -> None:
         if not self.is_paused:
             return
-        await self._calls.resume_stream(self.chat_id)
+        await self._calls.resume(self.chat_id)
         self.is_paused = False
 
     async def stop(self) -> None:
