@@ -1,4 +1,4 @@
-"""IDOL Music — Entry Point.
+"""IDOL Music \u2014 Entry Point.
 Starts both Pyrogram clients (bot + assistant) and PyTgCalls.
 """
 from __future__ import annotations
@@ -13,6 +13,7 @@ from bot.clients import create_bot, create_assistant, create_calls
 from music.manager import SessionManager
 from handlers import system, music, developer
 from db import client as db_client
+from db.models import get_group_lang
 from utils import log_group
 import strings
 
@@ -27,10 +28,21 @@ async def main() -> None:
     assistant = create_assistant()
     bot = create_bot()
     calls = create_calls(assistant)
-    sessions = SessionManager(calls)
 
     # --- MongoDB ---
     await db_client.connect()
+
+    # Auto-leave callback
+    async def on_auto_leave(chat_id: int) -> None:
+        lang = await get_group_lang(chat_id)
+        try:
+            await bot.send_message(chat_id, strings.get("AUTO_LEAVE", lang))
+        except Exception:
+            pass
+        sessions.remove(chat_id)
+        await log_group.send(strings.get("LOG_SESSION_LEAVE", "en", chat_id=chat_id))
+
+    sessions = SessionManager(calls, assistant=assistant, on_auto_leave=on_auto_leave)
 
     # --- PyTgCalls event handlers ---
     @calls.on_update(filters=pf.chat_update(ChatUpdate.Status.CLOSED_VOICE_CHAT))

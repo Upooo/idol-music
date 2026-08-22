@@ -11,7 +11,7 @@ HELP = (
     "<b>IDOL Music</b> <code>v1.0.0</code>\n\n"
     "<b>Music</b>\n"
     "<code>m!p &lt;query&gt;</code> / <code>m!play &lt;query&gt;</code> \u2014 play or queue\n"
-    "<code>m!s</code> / <code>m!skip</code> \u2014 skip\n"
+    "<code>m!s</code> / <code>m!skip</code> \u2014 skip (vote / admin)\n"
     "<code>m!pause</code> \u2014 pause\n"
     "<code>m!resume</code> \u2014 resume\n"
     "<code>m!np</code> \u2014 now playing\n"
@@ -21,11 +21,13 @@ HELP = (
     "<code>m!autoplay</code> \u2014 toggle autoplay\n\n"
     "<b>System</b>\n"
     "<code>m!help</code> \u2014 this message\n"
-    "<code>m!ping</code> \u2014 latency\n\n"
+    "<code>m!ping</code> \u2014 latency\n"
+    "<code>m!lang [en|id]</code> \u2014 set language\n\n"
     "<b>Notes</b>\n"
     "\u2022 Manual requests always have priority over autoplay.\n"
-    "\u2022 Max 5 pending manual requests while autoplay is active.\n"
-    "\u2022 Only group admins can use control commands (pause, skip, stop, etc)."
+    "\u2022 Anyone can vote to skip; admins skip instantly.\n"
+    "\u2022 Bot auto-leaves after 5 min with no listeners.\n"
+    "\u2022 Max 5 pending manual requests while autoplay is active."
 )
 
 PING = "Pong! <code>{latency:.0f}ms</code>"
@@ -64,6 +66,9 @@ SKIP_ADMIN_ONLY = "Only group admins can skip."
 SKIP_NOTHING = "Nothing is currently playing."
 SKIP_DONE = "Skipped. Now playing: <code>{title}</code>"
 SKIP_EMPTY = "Skipped. Nothing left in queue."
+SKIP_VOTE_ADDED = "Vote skip: <code>{votes}/{needed}</code>"
+SKIP_VOTE_ALREADY = "You already voted to skip."
+SKIP_VOTE_PASSED = "Vote passed! Skipping..."
 
 # --- Pause / Resume ---
 PAUSE_ADMIN_ONLY = "Only group admins can pause."
@@ -99,6 +104,15 @@ AUTOPLAY_ADMIN_ONLY = "Only group admins can toggle autoplay."
 AUTOPLAY_ENABLED = "Autoplay <b>enabled</b> for this session."
 AUTOPLAY_DISABLED = "Autoplay <b>disabled</b>."
 AUTOPLAY_ALREADY_ON = "Autoplay is already enabled."
+
+# --- Language ---
+LANG_CURRENT = "Current language: <code>{lang}</code>"
+LANG_SET = "Language set to <code>{lang}</code>."
+LANG_INVALID = "Invalid language. Available: {languages}"
+LANG_ADMIN_ONLY = "Only group admins can change the language."
+
+# --- Auto-leave ---
+AUTO_LEAVE = "No listeners for 5 minutes. Leaving voice chat."
 
 # --- Developer ---
 DEV_ONLY = "This command is restricted to developers."

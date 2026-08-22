@@ -11,7 +11,7 @@ HELP = (
     "<b>IDOL Music</b> <code>v1.0.0</code>\n\n"
     "<b>Musik</b>\n"
     "<code>m!p &lt;judul&gt;</code> / <code>m!play &lt;judul&gt;</code> \u2014 putar atau antri\n"
-    "<code>m!s</code> / <code>m!skip</code> \u2014 skip\n"
+    "<code>m!s</code> / <code>m!skip</code> \u2014 skip (vote / admin)\n"
     "<code>m!pause</code> \u2014 jeda\n"
     "<code>m!resume</code> \u2014 lanjutkan\n"
     "<code>m!np</code> \u2014 sedang diputar\n"
@@ -21,11 +21,13 @@ HELP = (
     "<code>m!autoplay</code> \u2014 toggle autoplay\n\n"
     "<b>Sistem</b>\n"
     "<code>m!help</code> \u2014 pesan ini\n"
-    "<code>m!ping</code> \u2014 latensi\n\n"
+    "<code>m!ping</code> \u2014 latensi\n"
+    "<code>m!lang [en|id]</code> \u2014 ubah bahasa\n\n"
     "<b>Catatan</b>\n"
     "\u2022 Request manual selalu prioritas di atas autoplay.\n"
-    "\u2022 Maksimal 5 antrian manual saat autoplay aktif.\n"
-    "\u2022 Hanya admin grup yang bisa menggunakan perintah kontrol (pause, skip, stop, dll)."
+    "\u2022 Siapapun bisa vote skip; admin skip langsung.\n"
+    "\u2022 Bot otomatis keluar setelah 5 menit tanpa listener.\n"
+    "\u2022 Maksimal 5 antrian manual saat autoplay aktif."
 )
 
 PING = "Pong! <code>{latency:.0f}ms</code>"
@@ -64,6 +66,9 @@ SKIP_ADMIN_ONLY = "Hanya admin grup yang bisa skip."
 SKIP_NOTHING = "Tidak ada yang sedang diputar."
 SKIP_DONE = "Diskip. Sekarang memutar: <code>{title}</code>"
 SKIP_EMPTY = "Diskip. Antrian kosong."
+SKIP_VOTE_ADDED = "Vote skip: <code>{votes}/{needed}</code>"
+SKIP_VOTE_ALREADY = "Kamu sudah vote skip."
+SKIP_VOTE_PASSED = "Vote lolos! Skipping..."
 
 # --- Pause / Resume ---
 PAUSE_ADMIN_ONLY = "Hanya admin grup yang bisa jeda."
@@ -99,6 +104,15 @@ AUTOPLAY_ADMIN_ONLY = "Hanya admin grup yang bisa toggle autoplay."
 AUTOPLAY_ENABLED = "Autoplay <b>diaktifkan</b> untuk sesi ini."
 AUTOPLAY_DISABLED = "Autoplay <b>dinonaktifkan</b>."
 AUTOPLAY_ALREADY_ON = "Autoplay sudah aktif."
+
+# --- Language ---
+LANG_CURRENT = "Bahasa saat ini: <code>{lang}</code>"
+LANG_SET = "Bahasa diubah ke <code>{lang}</code>."
+LANG_INVALID = "Bahasa tidak valid. Tersedia: {languages}"
+LANG_ADMIN_ONLY = "Hanya admin grup yang bisa mengubah bahasa."
+
+# --- Auto-leave ---
+AUTO_LEAVE = "Tidak ada listener selama 5 menit. Keluar dari voice chat."
 
 # --- Developer ---
 DEV_ONLY = "Perintah ini khusus untuk developer."
