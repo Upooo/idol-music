@@ -1,6 +1,6 @@
-aiogram
 pyrogram
-ntgcalls
+tgcrypto
+py-tgcalls
 python-dotenv
 yt-dlp
-spotipy
+aiosqlite
