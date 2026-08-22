@@ -12,6 +12,9 @@ from pytgcalls.types import ChatUpdate, StreamEnded
 from bot.clients import create_bot, create_assistant, create_calls
 from music.manager import SessionManager
 from handlers import system, music, developer
+from db import client as db_client
+from utils import log_group
+import strings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +29,9 @@ async def main() -> None:
     calls = create_calls(assistant)
     sessions = SessionManager(calls)
 
+    # --- MongoDB ---
+    await db_client.connect()
+
     # --- PyTgCalls event handlers ---
     @calls.on_update(filters=pf.chat_update(ChatUpdate.Status.CLOSED_VOICE_CHAT))
     async def on_vc_closed(client, update: ChatUpdate):
@@ -36,7 +42,6 @@ async def main() -> None:
 
     @calls.on_update(filters=pf.stream_end())
     async def on_stream_end(client, update: StreamEnded):
-        # Single entry point — delegate entirely to Player -> Session
         sess = sessions.get(update.chat_id)
         await sess.player.handle_stream_end()
 
@@ -71,6 +76,12 @@ async def main() -> None:
         await bot.stop()
         await assistant.stop()
         raise
+
+    # --- Log group ---
+    log_group.init(bot)
+    await log_group.send(
+        strings.get("LOG_STARTED", "en", username=me.username, sessions=sessions.active_count)
+    )
 
     log.info("IDOL Music is running.")
     await asyncio.Event().wait()

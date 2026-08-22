@@ -1,0 +1,129 @@
+"""Bahasa Indonesia strings for IDOL Music bot."""
+
+# --- System ---
+START = (
+    "<b>IDOL Music</b> <code>v1.0.0</code>\n\n"
+    "Bot musik simple & stabil untuk voice chat Telegram.\n\n"
+    "Ketik <code>m!help</code> untuk melihat daftar perintah."
+)
+
+HELP = (
+    "<b>IDOL Music</b> <code>v1.0.0</code>\n\n"
+    "<b>Musik</b>\n"
+    "<code>m!p &lt;judul&gt;</code> / <code>m!play &lt;judul&gt;</code> \u2014 putar atau antri\n"
+    "<code>m!s</code> / <code>m!skip</code> \u2014 skip\n"
+    "<code>m!pause</code> \u2014 jeda\n"
+    "<code>m!resume</code> \u2014 lanjutkan\n"
+    "<code>m!np</code> \u2014 sedang diputar\n"
+    "<code>m!q</code> / <code>m!queue</code> \u2014 lihat antrian\n"
+    "<code>m!stop</code> \u2014 berhenti dan keluar\n"
+    "<code>m!leave</code> \u2014 keluar dari voice chat\n"
+    "<code>m!autoplay</code> \u2014 toggle autoplay\n\n"
+    "<b>Sistem</b>\n"
+    "<code>m!help</code> \u2014 pesan ini\n"
+    "<code>m!ping</code> \u2014 latensi\n\n"
+    "<b>Catatan</b>\n"
+    "\u2022 Request manual selalu prioritas di atas autoplay.\n"
+    "\u2022 Maksimal 5 antrian manual saat autoplay aktif.\n"
+    "\u2022 Hanya admin grup yang bisa menggunakan perintah kontrol (pause, skip, stop, dll)."
+)
+
+PING = "Pong! <code>{latency:.0f}ms</code>"
+
+# --- Music ---
+PLAY_PROVIDE_QUERY = (
+    "Masukkan nama lagu atau URL.\n"
+    "Contoh: <code>m!p never gonna give you up</code>"
+)
+PLAY_GROUPS_ONLY = "Perintah ini hanya bisa digunakan di grup."
+PLAY_NOT_ALLOWED = "Kamu tidak diizinkan untuk memutar musik."
+PLAY_SEARCHING = "Mencari\u2026"
+PLAY_NOT_FOUND = "Lagu tidak ditemukan. Coba kata kunci lain."
+PLAY_EXTRACTION_FAILED = (
+    "Gagal mengekstrak lagu. Mungkin privat, dihapus, atau tidak didukung."
+)
+PLAY_QUEUE_FULL = "{error}"
+PLAY_SOURCE_ERROR = "{error}"
+PLAY_FAILED = (
+    "Gagal memulai pemutaran.\n"
+    "<i>Pastikan voice chat aktif dan assistant bisa bergabung.</i>"
+)
+NOW_PLAYING = (
+    "<b>Sedang Diputar</b>\n"
+    "<code>{title}</code>\n"
+    "Durasi: <code>{duration}</code> \u00b7 Oleh: <code>{requester}</code>"
+)
+ADDED_TO_QUEUE = (
+    "<b>Ditambahkan ke antrian</b>\n"
+    "<code>{title}</code>\n"
+    "Posisi: <code>{position}</code> \u00b7 Autoplay: <code>{autoplay}</code>"
+)
+
+# --- Skip ---
+SKIP_ADMIN_ONLY = "Hanya admin grup yang bisa skip."
+SKIP_NOTHING = "Tidak ada yang sedang diputar."
+SKIP_DONE = "Diskip. Sekarang memutar: <code>{title}</code>"
+SKIP_EMPTY = "Diskip. Antrian kosong."
+
+# --- Pause / Resume ---
+PAUSE_ADMIN_ONLY = "Hanya admin grup yang bisa jeda."
+PAUSE_DONE = "Pemutaran dijeda."
+PAUSE_NOTHING = "Tidak ada yang sedang diputar."
+RESUME_ADMIN_ONLY = "Hanya admin grup yang bisa lanjutkan."
+RESUME_DONE = "Pemutaran dilanjutkan."
+RESUME_NOTHING = "Tidak ada yang sedang dijeda."
+
+# --- Now Playing ---
+NP_NOTHING = "Tidak ada yang sedang diputar."
+NP_DISPLAY = (
+    "<b>Sedang Diputar</b>\n"
+    "<code>{title}</code>\n"
+    "Durasi: <code>{duration}</code> \u00b7 Oleh: <code>{requester}</code>"
+)
+
+# --- Queue ---
+QUEUE_EMPTY = "Antrian kosong."
+QUEUE_HEADER = "<b>Antrian</b> ({count} lagu)\n"
+QUEUE_ITEM = "{pos}. <code>{title}</code> \u2014 <code>{duration}</code>\n"
+QUEUE_NOW_PLAYING = "\U0001f3b5 Sekarang: <code>{title}</code>\n\n"
+
+# --- Stop / Leave ---
+STOP_ADMIN_ONLY = "Hanya admin grup yang bisa stop."
+STOP_DONE = "Dihentikan. Antrian dibersihkan dan keluar dari voice chat."
+LEAVE_ADMIN_ONLY = "Hanya admin grup yang bisa menggunakan leave."
+LEAVE_DONE = "Keluar dari voice chat."
+LEAVE_NOT_ACTIVE = "Tidak sedang di voice chat."
+
+# --- Autoplay ---
+AUTOPLAY_ADMIN_ONLY = "Hanya admin grup yang bisa toggle autoplay."
+AUTOPLAY_ENABLED = "Autoplay <b>diaktifkan</b> untuk sesi ini."
+AUTOPLAY_DISABLED = "Autoplay <b>dinonaktifkan</b>."
+AUTOPLAY_ALREADY_ON = "Autoplay sudah aktif."
+
+# --- Developer ---
+DEV_ONLY = "Perintah ini khusus untuk developer."
+DEV_RESTART = "Memulai ulang\u2026"
+DEV_PULL = "Menarik perubahan terbaru\u2026"
+DEV_PULL_RESULT = "<b>git pull</b>\n<code>{output}</code>"
+DEV_BC_USAGE = "Gunakan: <code>m!bc &lt;pesan&gt;</code> atau reply ke pesan."
+DEV_BC_NO_TARGETS = (
+    "Belum ada grup aktif untuk broadcast.\n"
+    "(Grup muncul setelah sesi musik dimulai.)"
+)
+DEV_BC_DONE = "Broadcast selesai. Berhasil: {ok} \u00b7 Gagal: {fail}"
+DEV_STATUS = (
+    "<b>Status IDOL Music</b>\n"
+    "Uptime: <code>{uptime}</code>\n"
+    "Sesi aktif: <code>{sessions}</code>\n"
+    "Python: <code>{python}</code>\n"
+    "MongoDB: <code>{mongo}</code>"
+)
+DEV_LOGS_USAGE = "Gunakan: <code>m!logs [n]</code> \u2014 tampilkan n baris terakhir (default 50)."
+DEV_LOGS_EMPTY = "File log tidak ditemukan."
+
+# --- Log Group ---
+LOG_STARTED = "\U0001f7e2 <b>IDOL Music dimulai</b>\nBot: @{username}\nSesi: {sessions}"
+LOG_STOPPED = "\U0001f534 <b>IDOL Music berhenti</b> (restart diminta)"
+LOG_ERROR = "\u26a0\ufe0f <b>Error di {location}</b>\n<code>{error}</code>"
+LOG_SESSION_JOIN = "\U0001f3b5 Bergabung VC di <code>{chat_id}</code>"
+LOG_SESSION_LEAVE = "\U0001f507 Keluar VC dari <code>{chat_id}</code>"
