@@ -5,8 +5,9 @@ Max 5 pending manual requests; reaching the limit disables autoplay.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Set
 
 if TYPE_CHECKING:
     from pytgcalls import PyTgCalls
@@ -17,7 +18,6 @@ from music.track import Track
 
 log = logging.getLogger(__name__)
 
-# Max consecutive autoplay failures before disabling
 AUTOPLAY_MAX_FAILURES = 3
 MAX_MANUAL_QUEUE = 5
 
@@ -34,20 +34,22 @@ class MusicSession:
         self.autoplay_enabled = False
         self._autoplay_failures = 0
         self._last_title: Optional[str] = None
-        self._processing_end = False
+        self._end_lock = asyncio.Lock()
+        self._play_history: Set[str] = set()
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------
     # Public API used by handlers
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------
 
     async def add_and_play(self, track: Track) -> int:
         """Add manual track. Returns 0 if started now, else 1-based queue position.
 
         Raises QueueFull when the manual queue is at the limit (also disables autoplay).
         """
-        if not self.player.is_playing:
+        if not self.player.is_active:
             await self.player.play(track)
             self._last_title = track.title
+            self._record_play(track)
             return 0
 
         if await self.queue.is_full():
@@ -66,6 +68,7 @@ class MusicSession:
         if next_track is not None:
             await self.player.play(next_track)
             self._last_title = next_track.title
+            self._record_play(next_track)
             return next_track
 
         if self.autoplay_enabled:
@@ -82,20 +85,21 @@ class MusicSession:
         self.autoplay_enabled = False
         self._autoplay_failures = 0
         self._last_title = None
+        self._play_history.clear()
         await self.player.stop()
         log.info("Session stopped/reset for chat %s", self.chat_id)
 
     async def pause(self) -> bool:
-        if not self.player.is_playing or self.player.is_paused:
+        if not self.player.is_playing:
             return False
         await self.player.pause()
-        return True
+        return self.player.is_paused
 
     async def resume(self) -> bool:
         if not self.player.is_paused:
             return False
         await self.player.resume()
-        return True
+        return self.player.is_playing
 
     async def enable_autoplay(self) -> bool:
         """Enable autoplay for this session. Returns True if newly enabled."""
@@ -104,7 +108,7 @@ class MusicSession:
         self.autoplay_enabled = True
         self._autoplay_failures = 0
         log.info("Autoplay enabled for chat %s", self.chat_id)
-        if not self.player.is_playing:
+        if not self.player.is_active:
             await self._try_autoplay()
         return True
 
@@ -114,22 +118,28 @@ class MusicSession:
 
     @property
     def is_active(self) -> bool:
-        return self.player.is_playing or self.player.is_paused
+        return self.player.is_active
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------
     # Stream-end / autoplay internals
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------
+
+    def _record_play(self, track: Track) -> None:
+        """Record a track URL in play history for autoplay dedup."""
+        if track.url:
+            self._play_history.add(track.url)
+        if len(self._play_history) > 50:
+            keep = list(self._play_history)[-30:]
+            self._play_history = set(keep)
 
     async def _on_track_end(self, chat_id: int) -> None:
-        if self._processing_end:
-            return
-        self._processing_end = True
-        try:
+        async with self._end_lock:
             log.info("Track ended in %s — advancing", chat_id)
             next_manual = await self.queue.get()
             if next_manual is not None:
                 await self.player.play(next_manual)
                 self._last_title = next_manual.title
+                self._record_play(next_manual)
                 return
 
             if self.autoplay_enabled:
@@ -139,12 +149,9 @@ class MusicSession:
 
             log.info("Nothing left in %s — stopping", chat_id)
             await self.player.stop()
-        finally:
-            self._processing_end = False
 
     async def _try_autoplay(self) -> Optional[Track]:
         """Search and play an autoplay track. Disables autoplay after repeated failures."""
-        # Lazy import to avoid circular deps; source may not exist yet during early steps
         try:
             from music.source import search_autoplay
         except ImportError:
@@ -154,7 +161,7 @@ class MusicSession:
             return None
 
         seed = self._last_title or "music"
-        track = await search_autoplay(seed)
+        track = await search_autoplay(seed, played_urls=self._play_history)
         if track is None:
             self._autoplay_failures += 1
             log.warning(
@@ -172,6 +179,7 @@ class MusicSession:
         try:
             await self.player.play(track)
             self._last_title = track.title
+            self._record_play(track)
             return track
         except Exception as exc:
             log.error("Failed to play autoplay track: %s", exc)

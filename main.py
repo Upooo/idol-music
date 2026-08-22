@@ -36,14 +36,14 @@ async def main() -> None:
 
     @calls.on_update(filters=pf.stream_end())
     async def on_stream_end(client, update: StreamEnded):
-        log.info("Stream ended in %d", update.chat_id)
+        # Single entry point — delegate entirely to Player -> Session
         sess = sessions.get(update.chat_id)
         await sess.player.handle_stream_end()
 
     # --- Pyrogram bot handlers ---
     system.register(bot)
     music.register(bot, sessions)
-    developer.register(bot, sessions)
+    developer.register(bot, sessions, assistant, calls)
 
     # --- Startup sequence ---
     log.info("Starting IDOL Music v1.0.0...")

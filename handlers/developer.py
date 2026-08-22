@@ -15,8 +15,39 @@ from filters.permissions import is_developer
 log = logging.getLogger(__name__)
 
 
-def register(bot: Client, sessions=None) -> None:
-    """sessions optional — used later for broadcast targets if available."""
+def register(bot: Client, sessions=None, assistant=None, calls=None) -> None:
+    """sessions, assistant, calls optional — used for graceful shutdown."""
+
+    async def _graceful_shutdown() -> None:
+        """Stop all active sessions and clients before restarting."""
+        if sessions is not None:
+            for chat_id in list(sessions.active_chats):
+                try:
+                    sess = sessions.get(chat_id)
+                    await sess.stop()
+                    sessions.remove(chat_id)
+                except Exception as exc:
+                    log.warning("Failed to stop session %s: %s", chat_id, exc)
+
+        if calls is not None:
+            try:
+                await calls.stop()
+                log.info("PyTgCalls stopped.")
+            except Exception as exc:
+                log.warning("Failed to stop PyTgCalls: %s", exc)
+
+        try:
+            await bot.stop()
+            log.info("Bot stopped.")
+        except Exception as exc:
+            log.warning("Failed to stop bot: %s", exc)
+
+        if assistant is not None:
+            try:
+                await assistant.stop()
+                log.info("Assistant stopped.")
+            except Exception as exc:
+                log.warning("Failed to stop assistant: %s", exc)
 
     @bot.on_message(command("restart"))
     async def restart_handler(client: Client, message: Message) -> None:
@@ -25,6 +56,7 @@ def register(bot: Client, sessions=None) -> None:
             return
         await message.reply("Restarting…")
         log.info("Restart requested by developer %s", message.from_user.id)
+        await _graceful_shutdown()
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
     @bot.on_message(command("pull"))
@@ -62,7 +94,6 @@ def register(bot: Client, sessions=None) -> None:
             )
             return
 
-        # Minimal V1: broadcast to currently known active sessions
         targets = []
         if sessions is not None:
             targets = list(sessions.active_chats)

@@ -1,4 +1,5 @@
 .env
+cookies.txt
 src/cookies/
 *.session
 *.session-journal
