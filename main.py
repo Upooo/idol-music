@@ -1,7 +1,7 @@
 """IDOL Music — Entry Point.
-
 Starts both Pyrogram clients (bot + assistant) and PyTgCalls.
 """
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -11,7 +11,7 @@ from pytgcalls.types import ChatUpdate, StreamEnded
 
 from bot.clients import create_bot, create_assistant, create_calls
 from music.manager import SessionManager
-from handlers import system, music
+from handlers import system, music, developer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,14 +21,12 @@ log = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    # Create clients
     assistant = create_assistant()
     bot = create_bot()
     calls = create_calls(assistant)
     sessions = SessionManager(calls)
 
     # --- PyTgCalls event handlers ---
-
     @calls.on_update(filters=pf.chat_update(ChatUpdate.Status.CLOSED_VOICE_CHAT))
     async def on_vc_closed(client, update: ChatUpdate):
         log.info("VC closed in %d", update.chat_id)
@@ -43,14 +41,12 @@ async def main() -> None:
         await sess.player.handle_stream_end()
 
     # --- Pyrogram bot handlers ---
-
     system.register(bot)
     music.register(bot, sessions)
+    developer.register(bot, sessions)
 
     # --- Startup sequence ---
-
-    log.info("Starting IDOL Music...")
-
+    log.info("Starting IDOL Music v1.0.0...")
     try:
         await assistant.start()
         log.info("Assistant started.")
@@ -77,8 +73,6 @@ async def main() -> None:
         raise
 
     log.info("IDOL Music is running.")
-
-    # Keep alive
     await asyncio.Event().wait()
 
 
