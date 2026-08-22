@@ -4,6 +4,7 @@ Phase 1: hardcoded test audio for stack verification.
 """
 
 from pyrogram import Client
+from pyrogram.enums import ChatType
 from pyrogram.types import Message
 
 from filters.prefix import command, get_args
@@ -19,7 +20,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
     @bot.on_message(command("p", aliases=["play"]))
     async def play_handler(client: Client, message: Message) -> None:
-        if message.chat.type == "private":
+        if message.chat.type == ChatType.PRIVATE:
             await message.reply("This command works in groups only.")
             return
 
@@ -65,7 +66,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
     @bot.on_message(command("stop"))
     async def stop_handler(client: Client, message: Message) -> None:
-        if message.chat.type == "private":
+        if message.chat.type == ChatType.PRIVATE:
             return
 
         session = sessions.get(message.chat.id)
@@ -75,7 +76,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
     @bot.on_message(command("leave"))
     async def leave_handler(client: Client, message: Message) -> None:
-        if message.chat.type == "private":
+        if message.chat.type == ChatType.PRIVATE:
             return
 
         session = sessions.get(message.chat.id)
@@ -85,7 +86,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
     @bot.on_message(command("pause"))
     async def pause_handler(client: Client, message: Message) -> None:
-        if message.chat.type == "private":
+        if message.chat.type == ChatType.PRIVATE:
             return
 
         session = sessions.get(message.chat.id)
@@ -94,7 +95,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
     @bot.on_message(command("resume"))
     async def resume_handler(client: Client, message: Message) -> None:
-        if message.chat.type == "private":
+        if message.chat.type == ChatType.PRIVATE:
             return
 
         session = sessions.get(message.chat.id)
@@ -103,7 +104,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
     @bot.on_message(command("s", aliases=["skip"]))
     async def skip_handler(client: Client, message: Message) -> None:
-        if message.chat.type == "private":
+        if message.chat.type == ChatType.PRIVATE:
             return
 
         session = sessions.get(message.chat.id)
