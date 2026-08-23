@@ -54,7 +54,7 @@ class Player:
         async with self._lock:
             # Force leave first to reset stale PyTgCalls state (fixes ghost VC after restart)
             try:
-                await self._calls.leave_call(self.chat_id)
+                await self._calls.leave_group_call(self.chat_id)
             except Exception:
                 pass
             await asyncio.sleep(0.3)  # brief pause for Telegram to process
@@ -85,7 +85,7 @@ class Player:
                 return
             self._state = PlayerState.STOPPING
             try:
-                await self._calls.leave_call(self.chat_id)
+                await self._calls.leave_group_call(self.chat_id)
             except Exception:
                 pass
             self.current_track = None

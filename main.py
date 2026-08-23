@@ -72,16 +72,15 @@ async def main() -> None:
     )
 
     # Stream end callback
+    @calls.on_stream_end()
     async def on_stream_end(client, update: StreamEnded) -> None:
         chat_id = update.chat_id
         session = sessions.get_existing(chat_id)
         if session:
             await session.handle_track_end()
 
-    calls.on_update(pf.stream_end)(on_stream_end)
-
     # Participant change — update listener count
-    @calls.on_participant_update()
+    @calls.on_participant()
     async def on_participant_change(client, update) -> None:
         chat_id = update.chat_id
         session = sessions.get_existing(chat_id)
