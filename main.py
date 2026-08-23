@@ -9,7 +9,7 @@ import traceback
 from logging.handlers import RotatingFileHandler
 
 from pytgcalls import filters as pf
-from pytgcalls.types import ChatUpdate, StreamEnded
+from pytgcalls.types import StreamEnded
 
 from bot.clients import create_bot, create_assistant, create_calls
 from music.manager import SessionManager
@@ -71,6 +71,7 @@ async def main() -> None:
         calls, assistant=assistant, on_auto_leave=on_auto_leave
     )
 
+    # Stream end callback
     async def on_stream_end(client, update: StreamEnded) -> None:
         chat_id = update.chat_id
         session = sessions.get_existing(chat_id)
@@ -80,13 +81,12 @@ async def main() -> None:
     calls.on_update(pf.stream_end)(on_stream_end)
 
     # Participant change — update listener count
-    async def on_participant_change(client, update: ChatUpdate) -> None:
+    @calls.on_participant_update()
+    async def on_participant_change(client, update) -> None:
         chat_id = update.chat_id
         session = sessions.get_existing(chat_id)
         if session:
             session.update_listeners(update)
-
-    calls.on_update(pf.chat_update())(on_participant_change)
 
     # --- Register handlers ---
     system.register(bot, sessions)
