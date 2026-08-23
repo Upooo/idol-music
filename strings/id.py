@@ -18,7 +18,7 @@ HELP = (
     "<code>m!q</code> / <code>m!queue</code> \u2014 lihat antrian\n"
     "<code>m!stop</code> \u2014 berhenti dan keluar\n"
     "<code>m!leave</code> \u2014 keluar dari voice chat\n"
-    "<code>m!autoplay</code> \u2014 toggle autoplay\n\n"
+    "<code>m!autoplay</code> \u2014 aktifkan autoplay\n\n"
     "<b>Sistem</b>\n"
     "<code>m!help</code> \u2014 pesan ini\n"
     "<code>m!ping</code> \u2014 latensi\n"
@@ -28,6 +28,7 @@ HELP = (
     "\u2022 Request manual selalu prioritas di atas autoplay.\n"
     "\u2022 Siapapun bisa vote skip; admin skip langsung.\n"
     "\u2022 Bot otomatis pause tanpa listener, keluar setelah 5 menit.\n"
+    "\u2022 Autoplay tetap nyala sampai m!stop atau auto-leave.\n"
     "\u2022 Maksimal 5 antrian manual saat autoplay aktif."
 )
 
@@ -111,8 +112,8 @@ LEAVE_DONE = "Keluar dari voice chat."
 LEAVE_NOT_ACTIVE = "Tidak sedang di voice chat."
 
 # --- Autoplay ---
-AUTOPLAY_ADMIN_ONLY = "Hanya admin grup yang bisa toggle autoplay."
-AUTOPLAY_ENABLED = "Autoplay <b>diaktifkan</b> untuk sesi ini."
+AUTOPLAY_ADMIN_ONLY = "Hanya admin grup yang bisa mengaktifkan autoplay."
+AUTOPLAY_ENABLED = "Autoplay <b>diaktifkan</b>. Tetap nyala sampai m!stop atau auto-leave."
 AUTOPLAY_DISABLED = "Autoplay <b>dinonaktifkan</b>."
 AUTOPLAY_ALREADY_ON = "Autoplay sudah aktif."
 
@@ -174,3 +175,4 @@ LOG_ERROR = "\u26a0\ufe0f <b>Error di {location}</b>\n<code>{error}</code>"
 LOG_SESSION_JOIN = "\U0001f3b5 Bergabung VC di <code>{chat_id}</code>"
 LOG_SESSION_LEAVE = "\U0001f507 Keluar VC dari <code>{chat_id}</code>"
 LOG_COOKIE_UPDATED = "\U0001f36a Cookies diperbarui via bot command. {lines} baris."
+LOG_ASSISTANT_STARTED = "\U0001f916 <b>Assistant dimulai</b>\nNama: {name}\nID: <code>{user_id}</code>"

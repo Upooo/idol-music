@@ -121,9 +121,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
             return
 
         # Vote skip
-        from utils.vc import get_vc_participant_count
-        vc_count = await get_vc_participant_count(None, message.chat.id) if False else 2  # fallback
-        threshold = max(2, vc_count // 2)
+        threshold = 2  # fallback threshold
 
         if session.votes.has_voted(message.chat.id, user.id):
             await message.reply(strings.get("SKIP_VOTE_ALREADY", lang))
@@ -287,7 +285,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
         await sessions.remove(message.chat.id)
         await message.reply(strings.get("LEAVE_DONE", lang))
 
-    # ----------- Autoplay -----------
+    # ----------- Autoplay (one-shot enable) -----------
 
     @bot.on_message(command("autoplay"))
     async def autoplay_handler(client: Client, message: Message) -> None:
@@ -304,9 +302,10 @@ def register(bot: Client, sessions: SessionManager) -> None:
             return
 
         session = sessions.get(message.chat.id)
-        session.autoplay = not session.autoplay
 
         if session.autoplay:
-            await message.reply(strings.get("AUTOPLAY_ENABLED", lang))
-        else:
-            await message.reply(strings.get("AUTOPLAY_DISABLED", lang))
+            await message.reply(strings.get("AUTOPLAY_ALREADY_ON", lang))
+            return
+
+        session.autoplay = True
+        await message.reply(strings.get("AUTOPLAY_ENABLED", lang))

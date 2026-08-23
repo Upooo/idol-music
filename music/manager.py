@@ -47,6 +47,11 @@ class SessionManager:
                 await session.player.stop()
             except Exception:
                 pass
+            # Force assistant to leave VC
+            try:
+                await self._calls.leave_group_call(chat_id)
+            except Exception:
+                pass
 
     def active_chat_ids(self) -> list[int]:
         return list(self._sessions.keys())

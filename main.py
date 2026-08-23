@@ -96,7 +96,7 @@ async def main() -> None:
     # Clear stale sessions from DB
     await clear_stale_sessions()
 
-    # --- Startup notification ---
+    # --- Startup notification (bot) ---
     me = await bot.get_me()
     mongo_status = "Connected" if db_client.is_connected() else "Disabled"
     cookies_status = "Loaded" if _cookies_exist() else "Not found"
@@ -109,6 +109,17 @@ async def main() -> None:
     )
     await log_group.send(startup_msg)
     log.info("IDOL Music started as @%s", me.username)
+
+    # --- Startup notification (assistant) ---
+    try:
+        ass_me = await assistant.get_me()
+        await log_group.send(
+            strings.get("LOG_ASSISTANT_STARTED", "en",
+                        name=ass_me.first_name or "Assistant",
+                        user_id=ass_me.id)
+        )
+    except Exception as exc:
+        await log_group.send(f"\u26a0\ufe0f Assistant info unavailable: {exc}")
 
     await asyncio.Event().wait()
 

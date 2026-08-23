@@ -18,7 +18,7 @@ HELP = (
     "<code>m!q</code> / <code>m!queue</code> \u2014 view queue\n"
     "<code>m!stop</code> \u2014 stop and leave\n"
     "<code>m!leave</code> \u2014 leave voice chat\n"
-    "<code>m!autoplay</code> \u2014 toggle autoplay\n\n"
+    "<code>m!autoplay</code> \u2014 enable autoplay\n\n"
     "<b>System</b>\n"
     "<code>m!help</code> \u2014 this message\n"
     "<code>m!ping</code> \u2014 latency\n"
@@ -28,6 +28,7 @@ HELP = (
     "\u2022 Manual requests always have priority over autoplay.\n"
     "\u2022 Anyone can vote skip; admins skip instantly.\n"
     "\u2022 Bot auto-pauses with no listeners, leaves after 5 min.\n"
+    "\u2022 Autoplay stays on until m!stop or auto-leave.\n"
     "\u2022 Max 5 manual queue items when autoplay is on."
 )
 
@@ -112,8 +113,8 @@ LEAVE_DONE = "Left voice chat."
 LEAVE_NOT_ACTIVE = "Not currently in a voice chat."
 
 # --- Autoplay ---
-AUTOPLAY_ADMIN_ONLY = "Only group admins can toggle autoplay."
-AUTOPLAY_ENABLED = "Autoplay <b>enabled</b> for this session."
+AUTOPLAY_ADMIN_ONLY = "Only group admins can enable autoplay."
+AUTOPLAY_ENABLED = "Autoplay <b>enabled</b>. Stays on until m!stop or auto-leave."
 AUTOPLAY_DISABLED = "Autoplay <b>disabled</b>."
 AUTOPLAY_ALREADY_ON = "Autoplay is already active."
 
@@ -175,3 +176,4 @@ LOG_ERROR = "\u26a0\ufe0f <b>Error in {location}</b>\n<code>{error}</code>"
 LOG_SESSION_JOIN = "\U0001f3b5 Joined VC in <code>{chat_id}</code>"
 LOG_SESSION_LEAVE = "\U0001f507 Left VC from <code>{chat_id}</code>"
 LOG_COOKIE_UPDATED = "\U0001f36a Cookies updated via bot command. {lines} lines."
+LOG_ASSISTANT_STARTED = "\U0001f916 <b>Assistant started</b>\nName: {name}\nID: <code>{user_id}</code>"
