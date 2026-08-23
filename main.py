@@ -1,5 +1,6 @@
-"""IDOL Music — Entry Point.
-Starts both Pyrogram clients (bot + assistant) and PyTgCalls.
+"""IDOL Music — Entry Point (V1.1.0 Clean).
+
+Slim wiring only. All logic lives in its own module.
 """
 from __future__ import annotations
 
@@ -15,29 +16,32 @@ from bot.clients import create_bot, create_assistant, create_calls
 from music.manager import SessionManager
 from handlers import system, music, developer
 from db import client as db_client
-from db.models import get_group_lang, clear_stale_sessions
+from db.models import clear_stale_sessions
 from utils import log_group
 import strings
 
-# --- Logging: console + file ---
-_log_fmt = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
-_file_handler = RotatingFileHandler(
-    "idol_music.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
-)
-_file_handler.setFormatter(logging.Formatter(_log_fmt))
-
+# --- Logging ---
+_FMT = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 logging.basicConfig(
     level=logging.INFO,
-    format=_log_fmt,
+    format=_FMT,
     handlers=[
         logging.StreamHandler(),
-        _file_handler,
+        RotatingFileHandler(
+            "idol_music.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
+        ),
     ],
 )
 log = logging.getLogger(__name__)
 
 
+def _cookies_exist() -> bool:
+    from pathlib import Path
+    return (Path(__file__).parent / "cookies.txt").is_file()
+
+
 async def main() -> None:
+    # --- Create clients ---
     assistant = create_assistant()
     bot = create_bot()
     calls = create_calls(assistant)
@@ -45,19 +49,9 @@ async def main() -> None:
     # --- MongoDB ---
     await db_client.connect()
 
-    # --- Global error handler for log group ---
-    async def _global_error_handler(client, update, err):
-        tb = traceback.format_exception(type(err), err, err.__traceback__)
-        tb_str = "".join(tb)[-1500:]  # truncate
-        location = type(update).__name__ if update else "unknown"
-        await log_group.send(
-            strings.get("LOG_ERROR", "en", location=location, error=tb_str)
-        )
-
-    bot.on_error()(_global_error_handler)
-
-    # Auto-leave / track-end callback
+    # --- Auto-leave callback ---
     async def on_auto_leave(chat_id: int) -> None:
+        from db.models import get_group_lang
         lang = await get_group_lang(chat_id)
         try:
             await bot.send_message(chat_id, strings.get("AUTO_LEAVE", lang))
@@ -67,66 +61,59 @@ async def main() -> None:
             strings.get("LOG_SESSION_LEAVE", "en", chat_id=chat_id)
         )
 
-    sessions = SessionManager(
-        calls, assistant=assistant, on_auto_leave=on_auto_leave
-    )
+    # --- Session manager ---
+    sessions = SessionManager(calls, assistant=assistant, on_auto_leave=on_auto_leave)
 
-    # Stream end callback (proven pattern from Phase 1)
+    # --- Stream end (proven pattern) ---
+    @calls.on_update(pf.stream_end)
     async def on_stream_end(client, update: StreamEnded) -> None:
-        chat_id = update.chat_id
-        session = sessions.get_existing(chat_id)
+        session = sessions.get_existing(update.chat_id)
         if session:
             await session.handle_track_end()
 
-    calls.on_update(pf.stream_end)(on_stream_end)
+    # --- Error handler ---
+    @bot.on_error()
+    async def on_error(client, update, err):
+        tb = "".join(traceback.format_exception(type(err), err, err.__traceback__))[-1500:]
+        location = type(update).__name__ if update else "unknown"
+        await log_group.send(strings.get("LOG_ERROR", "en", location=location, error=tb))
 
     # --- Register handlers ---
     system.register(bot, sessions)
     music.register(bot, sessions)
     developer.register(bot, sessions=sessions, assistant=assistant, calls=calls)
 
-    # --- Start clients ---
+    # --- Start ---
     await assistant.start()
     await bot.start()
     await calls.start()
-
-    # Init log group
     log_group.init(bot)
-
-    # Clear stale sessions from DB
     await clear_stale_sessions()
 
-    # --- Startup notification (bot) ---
+    # --- Startup log: bot ---
     me = await bot.get_me()
-    mongo_status = "Connected" if db_client.is_connected() else "Disabled"
-    cookies_status = "Loaded" if _cookies_exist() else "Not found"
-    startup_msg = strings.get(
+    await log_group.send(strings.get(
         "LOG_STARTED", "en",
         username=me.username or "unknown",
         sessions=len(sessions),
-        mongo=mongo_status,
-        cookies=cookies_status,
-    )
-    await log_group.send(startup_msg)
+        mongo="Connected" if db_client.is_connected() else "Disabled",
+        cookies="Loaded" if _cookies_exist() else "Not found",
+    ))
     log.info("IDOL Music started as @%s", me.username)
 
-    # --- Startup notification (assistant) ---
+    # --- Startup log: assistant ---
     try:
         ass_me = await assistant.get_me()
-        await log_group.send(
-            strings.get("LOG_ASSISTANT_STARTED", "en",
-                        name=ass_me.first_name or "Assistant",
-                        user_id=ass_me.id)
-        )
+        await log_group.send(strings.get(
+            "LOG_ASSISTANT_STARTED", "en",
+            name=ass_me.first_name or "Assistant",
+            user_id=ass_me.id,
+        ))
     except Exception as exc:
-        await log_group.send(f"\u26a0\ufe0f Assistant info unavailable: {exc}")
+        log.warning("Could not get assistant info: %s", exc)
 
+    # --- Keep alive ---
     await asyncio.Event().wait()
-
-
-def _cookies_exist() -> bool:
-    from pathlib import Path
-    return (Path(__file__).parent / "cookies.txt").is_file()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""SessionManager — registry of active MusicSessions."""
+"""SessionManager — registry of active MusicSessions (V1.1.0 Clean)."""
 from __future__ import annotations
 
 from typing import Callable, Awaitable, Optional
@@ -9,8 +9,6 @@ from music.session import MusicSession
 
 
 class SessionManager:
-    """Manages all active music sessions across groups."""
-
     def __init__(
         self,
         calls: PyTgCalls,
@@ -23,7 +21,7 @@ class SessionManager:
         self._sessions: dict[int, MusicSession] = {}
 
     def get(self, chat_id: int) -> MusicSession:
-        """Get or create a session (use for write commands like play)."""
+        """Get or create a session."""
         if chat_id not in self._sessions:
             self._sessions[chat_id] = MusicSession(
                 chat_id,
@@ -34,24 +32,16 @@ class SessionManager:
         return self._sessions[chat_id]
 
     def get_existing(self, chat_id: int) -> Optional[MusicSession]:
-        """Get session only if it exists (use for read/event commands)."""
+        """Get session only if it exists."""
         return self._sessions.get(chat_id)
 
     async def remove(self, chat_id: int) -> None:
-        """Remove session with proper cleanup."""
+        """Remove and cleanup a session.
+        session.stop() already calls player.stop() which calls
+        leave_group_call — single clean path, no double-leave."""
         session = self._sessions.pop(chat_id, None)
         if session:
             session._stop_auto_leave_checker()
-            # Ensure player is stopped
-            try:
-                await session.player.stop()
-            except Exception:
-                pass
-            # Force assistant to leave VC
-            try:
-                await self._calls.leave_group_call(chat_id)
-            except Exception:
-                pass
 
     def active_chat_ids(self) -> list[int]:
         return list(self._sessions.keys())

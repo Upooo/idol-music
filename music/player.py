@@ -1,9 +1,9 @@
-"""Player — abstraction over PyTgCalls 2.x for one group.
+"""Player — voice chat playback for one group (V1.1.0 Clean).
 
-Handles: join, play, pause, resume, stop, leave.
-Uses an enum-based state machine and asyncio.Lock for thread safety.
+State machine: IDLE → PLAYING ↔ PAUSED → IDLE.
+leave_group_call is called ONLY in stop().
+play() never force-leaves first (that caused the mute bug).
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +22,6 @@ class PlayerState(enum.Enum):
     IDLE = "idle"
     PLAYING = "playing"
     PAUSED = "paused"
-    STOPPING = "stopping"
 
 
 class Player:
@@ -44,14 +43,8 @@ class Player:
         return self._state in (PlayerState.PLAYING, PlayerState.PAUSED)
 
     async def play(self, track: Track) -> None:
+        """Start playing a track. Does NOT leave VC first."""
         async with self._lock:
-            # Force leave first to reset stale PyTgCalls state (fixes ghost VC after restart)
-            try:
-                await self._calls.leave_group_call(self.chat_id)
-            except Exception:
-                pass
-            await asyncio.sleep(0.3)  # brief pause for Telegram to process
-
             self.current_track = track
             stream = MediaStream(track.url, video_flags=MediaStream.Flags.IGNORE)
             await self._calls.play(self.chat_id, stream)
@@ -73,21 +66,21 @@ class Player:
             self._state = PlayerState.PLAYING
 
     async def stop(self) -> None:
+        """Stop playback AND leave the voice chat."""
         async with self._lock:
             if self._state == PlayerState.IDLE:
                 return
-            self._state = PlayerState.STOPPING
             try:
                 await self._calls.leave_group_call(self.chat_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                log.debug("leave_group_call in %d: %s", self.chat_id, exc)
             self.current_track = None
             self._state = PlayerState.IDLE
 
-    async def handle_stream_end(self) -> None:
-        """Called by main.py when stream finishes."""
+    async def on_stream_end(self) -> None:
+        """Called when PyTgCalls signals stream finished.
+        Resets state so the next track can be played.
+        Does NOT leave VC — session decides what to do next."""
         async with self._lock:
-            if self._state == PlayerState.STOPPING:
-                return
-            self._state = PlayerState.IDLE
             self.current_track = None
+            self._state = PlayerState.IDLE
