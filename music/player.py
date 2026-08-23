@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Callable, Awaitable
 
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream
@@ -29,15 +28,9 @@ class PlayerState(enum.Enum):
 class Player:
     """Manages voice chat playback for a single group."""
 
-    def __init__(
-        self,
-        chat_id: int,
-        calls: PyTgCalls,
-        on_track_end: Callable[[int], Awaitable[None]] | None = None,
-    ) -> None:
+    def __init__(self, chat_id: int, calls: PyTgCalls) -> None:
         self.chat_id = chat_id
         self._calls = calls
-        self._on_track_end = on_track_end
         self._state = PlayerState.IDLE
         self._lock = asyncio.Lock()
         self.current_track: Track | None = None
@@ -92,12 +85,9 @@ class Player:
             self._state = PlayerState.IDLE
 
     async def handle_stream_end(self) -> None:
-        """Called by PyTgCalls when stream finishes."""
+        """Called by main.py when stream finishes."""
         async with self._lock:
             if self._state == PlayerState.STOPPING:
                 return
             self._state = PlayerState.IDLE
             self.current_track = None
-
-        if self._on_track_end:
-            await self._on_track_end(self.chat_id)

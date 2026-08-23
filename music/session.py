@@ -43,7 +43,7 @@ class MusicSession:
         self.chat_id = chat_id
         self._calls = calls
         self._assistant = assistant
-        self.player = Player(chat_id, calls, on_track_end=self._on_track_end)
+        self.player = Player(chat_id, calls)
         self.queue = MusicQueue(max_size=MAX_MANUAL_QUEUE)
         self.votes = VoteTracker()
         self.autoplay = False
@@ -105,6 +105,7 @@ class MusicSession:
         await self._db_session_leave()
 
     async def handle_track_end(self) -> None:
+        """Called from main.py on stream_end event."""
         async with self._end_lock:
             await self.player.handle_stream_end()
             nxt = await self.queue.pop()
