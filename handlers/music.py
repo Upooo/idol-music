@@ -1,10 +1,15 @@
-"""Music handlers — m! prefix commands (V1.1.0).
+"""Music handlers — m! prefix commands (V1.1.0 Clean).
 
 Permission model:
 - m!p / m!play : any group member
 - m!np / m!q   : anyone (read-only)
 - m!skip       : vote-based (anyone) / force (admin + developer)
 - pause/resume/stop/leave/autoplay : group admin or developer
+
+All method calls verified against:
+- queue.py: put(), get(), clear(), snapshot()
+- session.py: add_and_play(), skip(), pause(), resume(), stop()
+- player.py: play(), pause(), resume(), stop(), is_active, current_track
 """
 from __future__ import annotations
 
@@ -27,7 +32,7 @@ log = logging.getLogger(__name__)
 
 def register(bot: Client, sessions: SessionManager) -> None:
 
-    # ----------- Play -----------
+    # ==================== Play ====================
 
     @bot.on_message(command("p", aliases=["play"]))
     async def play_handler(client: Client, message: Message) -> None:
@@ -81,21 +86,21 @@ def register(bot: Client, sessions: SessionManager) -> None:
             return
 
         if position == 0:
-            await status_msg.edit_text(
-                strings.get("NOW_PLAYING", lang,
-                            title=track.title,
-                            duration=track.duration_str,
-                            requester=track.requester_name)
-            )
+            await status_msg.edit_text(strings.get(
+                "NOW_PLAYING", lang,
+                title=track.title,
+                duration=track.duration_str,
+                requester=track.requester_name,
+            ))
         else:
-            await status_msg.edit_text(
-                strings.get("ADDED_TO_QUEUE", lang,
-                            title=track.title,
-                            position=position,
-                            autoplay="On" if session.autoplay else "Off")
-            )
+            await status_msg.edit_text(strings.get(
+                "ADDED_TO_QUEUE", lang,
+                title=track.title,
+                position=position,
+                autoplay="On" if session.autoplay else "Off",
+            ))
 
-    # ----------- Skip -----------
+    # ==================== Skip ====================
 
     @bot.on_message(command("s", aliases=["skip"]))
     async def skip_handler(client: Client, message: Message) -> None:
@@ -121,8 +126,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
             return
 
         # Vote skip
-        threshold = 2  # fallback threshold
-
+        threshold = 2
         if session.votes.has_voted(message.chat.id, user.id):
             await message.reply(strings.get("SKIP_VOTE_ALREADY", lang))
             return
@@ -136,11 +140,11 @@ def register(bot: Client, sessions: SessionManager) -> None:
             else:
                 await message.reply(strings.get("SKIP_EMPTY", lang))
         else:
-            await message.reply(
-                strings.get("SKIP_VOTE_ADDED", lang, votes=count, needed=threshold)
-            )
+            await message.reply(strings.get(
+                "SKIP_VOTE_ADDED", lang, votes=count, needed=threshold,
+            ))
 
-    # ----------- Pause / Resume -----------
+    # ==================== Pause / Resume ====================
 
     @bot.on_message(command("pause"))
     async def pause_handler(client: Client, message: Message) -> None:
@@ -186,7 +190,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
         await session.resume()
         await message.reply(strings.get("RESUME_DONE", lang))
 
-    # ----------- Now Playing -----------
+    # ==================== Now Playing ====================
 
     @bot.on_message(command("np", aliases=["nowplaying"]))
     async def np_handler(client: Client, message: Message) -> None:
@@ -200,14 +204,14 @@ def register(bot: Client, sessions: SessionManager) -> None:
             return
 
         t = session.player.current_track
-        await message.reply(
-            strings.get("NP_DISPLAY", lang,
-                        title=t.title,
-                        duration=t.duration_str,
-                        requester=t.requester_name)
-        )
+        await message.reply(strings.get(
+            "NP_DISPLAY", lang,
+            title=t.title,
+            duration=t.duration_str,
+            requester=t.requester_name,
+        ))
 
-    # ----------- Queue -----------
+    # ==================== Queue ====================
 
     @bot.on_message(command("q", aliases=["queue"]))
     async def queue_handler(client: Client, message: Message) -> None:
@@ -227,20 +231,23 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
         text = ""
         if session.player.current_track:
-            text += strings.get("QUEUE_NOW_PLAYING", lang,
-                                title=session.player.current_track.title)
-
+            text += strings.get(
+                "QUEUE_NOW_PLAYING", lang,
+                title=session.player.current_track.title,
+            )
         if items:
             text += strings.get("QUEUE_HEADER", lang, count=len(items))
             for i, t in enumerate(items, 1):
-                text += strings.get("QUEUE_ITEM", lang,
-                                    pos=i, title=t.title, duration=t.duration_str)
+                text += strings.get(
+                    "QUEUE_ITEM", lang,
+                    pos=i, title=t.title, duration=t.duration_str,
+                )
         elif not session.player.current_track:
             text = strings.get("QUEUE_EMPTY", lang)
 
         await message.reply(text)
 
-    # ----------- Stop / Leave -----------
+    # ==================== Stop / Leave ====================
 
     @bot.on_message(command("stop"))
     async def stop_handler(client: Client, message: Message) -> None:
@@ -258,8 +265,8 @@ def register(bot: Client, sessions: SessionManager) -> None:
 
         session = sessions.get_existing(message.chat.id)
         if session:
-            await session.stop()
-            await sessions.remove(message.chat.id)
+            await session.stop()  # stops player + leaves VC
+            await sessions.remove(message.chat.id)  # cleanup from registry
         await message.reply(strings.get("STOP_DONE", lang))
 
     @bot.on_message(command("leave", aliases=["disconnect"]))
@@ -285,7 +292,7 @@ def register(bot: Client, sessions: SessionManager) -> None:
         await sessions.remove(message.chat.id)
         await message.reply(strings.get("LEAVE_DONE", lang))
 
-    # ----------- Autoplay (one-shot enable) -----------
+    # ==================== Autoplay (one-shot) ====================
 
     @bot.on_message(command("autoplay"))
     async def autoplay_handler(client: Client, message: Message) -> None:
@@ -302,7 +309,6 @@ def register(bot: Client, sessions: SessionManager) -> None:
             return
 
         session = sessions.get(message.chat.id)
-
         if session.autoplay:
             await message.reply(strings.get("AUTOPLAY_ALREADY_ON", lang))
             return
