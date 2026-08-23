@@ -71,21 +71,14 @@ async def main() -> None:
         calls, assistant=assistant, on_auto_leave=on_auto_leave
     )
 
-    # Stream end callback
-    @calls.on_stream_end()
+    # Stream end callback (proven pattern from Phase 1)
     async def on_stream_end(client, update: StreamEnded) -> None:
         chat_id = update.chat_id
         session = sessions.get_existing(chat_id)
         if session:
             await session.handle_track_end()
 
-    # Participant change — update listener count
-    @calls.on_participant()
-    async def on_participant_change(client, update) -> None:
-        chat_id = update.chat_id
-        session = sessions.get_existing(chat_id)
-        if session:
-            session.update_listeners(update)
+    calls.on_update(pf.stream_end)(on_stream_end)
 
     # --- Register handlers ---
     system.register(bot, sessions)
