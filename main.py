@@ -1,10 +1,12 @@
-"""IDOL Music \u2014 Entry Point.
+"""IDOL Music — Entry Point.
 Starts both Pyrogram clients (bot + assistant) and PyTgCalls.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import traceback
+from logging.handlers import RotatingFileHandler
 
 from pytgcalls import filters as pf
 from pytgcalls.types import ChatUpdate, StreamEnded
@@ -13,13 +15,24 @@ from bot.clients import create_bot, create_assistant, create_calls
 from music.manager import SessionManager
 from handlers import system, music, developer
 from db import client as db_client
-from db.models import get_group_lang
+from db.models import get_group_lang, clear_stale_sessions
 from utils import log_group
 import strings
 
+# --- Logging: console + file ---
+_log_fmt = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+_file_handler = RotatingFileHandler(
+    "idol_music.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
+)
+_file_handler.setFormatter(logging.Formatter(_log_fmt))
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+    format=_log_fmt,
+    handlers=[
+        logging.StreamHandler(),
+        _file_handler,
+    ],
 )
 log = logging.getLogger(__name__)
 
@@ -32,6 +45,17 @@ async def main() -> None:
     # --- MongoDB ---
     await db_client.connect()
 
+    # --- Global error handler for log group ---
+    async def _global_error_handler(client, update, err):
+        tb = traceback.format_exception(type(err), err, err.__traceback__)
+        tb_str = "".join(tb)[-1500:]  # truncate
+        location = type(update).__name__ if update else "unknown"
+        await log_group.send(
+            strings.get("LOG_ERROR", "en", location=location, error=tb_str)
+        )
+
+    bot.on_error()(_global_error_handler)
+
     # Auto-leave / track-end callback
     async def on_auto_leave(chat_id: int) -> None:
         lang = await get_group_lang(chat_id)
@@ -39,64 +63,67 @@ async def main() -> None:
             await bot.send_message(chat_id, strings.get("AUTO_LEAVE", lang))
         except Exception:
             pass
-        sessions.remove(chat_id)
-        await log_group.send(strings.get("LOG_SESSION_LEAVE", "en", chat_id=chat_id))
+        await log_group.send(
+            strings.get("LOG_SESSION_LEAVE", "en", chat_id=chat_id)
+        )
 
-    sessions = SessionManager(calls, assistant=assistant, on_auto_leave=on_auto_leave)
-
-    # --- PyTgCalls event handlers ---
-    @calls.on_update(filters=pf.chat_update(ChatUpdate.Status.CLOSED_VOICE_CHAT))
-    async def on_vc_closed(client, update: ChatUpdate):
-        log.info("VC closed in %d", update.chat_id)
-        sess = sessions.get(update.chat_id)
-        await sess.stop()
-        sessions.remove(update.chat_id)
-
-    @calls.on_update(filters=pf.stream_end())
-    async def on_stream_end(client, update: StreamEnded):
-        sess = sessions.get(update.chat_id)
-        await sess.player.handle_stream_end()
-
-    # --- Pyrogram bot handlers ---
-    system.register(bot, sessions)
-    music.register(bot, sessions)
-    developer.register(bot, sessions, assistant, calls)
-
-    # --- Startup sequence ---
-    log.info("Starting IDOL Music v1.0.0...")
-    try:
-        await assistant.start()
-        log.info("Assistant started.")
-    except Exception as e:
-        log.error("Failed to start assistant: %s", e)
-        raise
-
-    try:
-        await bot.start()
-        me = await bot.get_me()
-        log.info("Bot started as @%s (id=%d)", me.username, me.id)
-    except Exception as e:
-        log.error("Failed to start bot: %s", e)
-        await assistant.stop()
-        raise
-
-    try:
-        await calls.start()
-        log.info("PyTgCalls started.")
-    except Exception as e:
-        log.error("Failed to start PyTgCalls: %s", e)
-        await bot.stop()
-        await assistant.stop()
-        raise
-
-    # --- Log group ---
-    log_group.init(bot)
-    await log_group.send(
-        strings.get("LOG_STARTED", "en", username=me.username, sessions=sessions.active_count)
+    sessions = SessionManager(
+        calls, assistant=assistant, on_auto_leave=on_auto_leave
     )
 
-    log.info("IDOL Music is running.")
+    async def on_stream_end(client, update: StreamEnded) -> None:
+        chat_id = update.chat_id
+        session = sessions.get_existing(chat_id)
+        if session:
+            await session.handle_track_end()
+
+    calls.on_update(pf.stream_end)(on_stream_end)
+
+    # Participant change — update listener count
+    async def on_participant_change(client, update: ChatUpdate) -> None:
+        chat_id = update.chat_id
+        session = sessions.get_existing(chat_id)
+        if session:
+            session.update_listeners(update)
+
+    calls.on_update(pf.chat_update())(on_participant_change)
+
+    # --- Register handlers ---
+    system.register(bot, sessions)
+    music.register(bot, sessions)
+    developer.register(bot, sessions=sessions, assistant=assistant, calls=calls)
+
+    # --- Start clients ---
+    await assistant.start()
+    await bot.start()
+    await calls.start()
+
+    # Init log group
+    log_group.init(bot)
+
+    # Clear stale sessions from DB
+    await clear_stale_sessions()
+
+    # --- Startup notification ---
+    me = await bot.get_me()
+    mongo_status = "Connected" if db_client.is_connected() else "Disabled"
+    cookies_status = "Loaded" if _cookies_exist() else "Not found"
+    startup_msg = strings.get(
+        "LOG_STARTED", "en",
+        username=me.username or "unknown",
+        sessions=len(sessions),
+        mongo=mongo_status,
+        cookies=cookies_status,
+    )
+    await log_group.send(startup_msg)
+    log.info("IDOL Music started as @%s", me.username)
+
     await asyncio.Event().wait()
+
+
+def _cookies_exist() -> bool:
+    from pathlib import Path
+    return (Path(__file__).parent / "cookies.txt").is_file()
 
 
 if __name__ == "__main__":

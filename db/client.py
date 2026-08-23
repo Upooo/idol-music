@@ -1,4 +1,4 @@
-"""MongoDB client \u2014 async connection via Motor."""
+"""MongoDB client — async connection via Motor."""
 from __future__ import annotations
 
 import logging
@@ -16,7 +16,7 @@ async def connect() -> None:
     """Connect to MongoDB. No-op if MONGO_URI is not set."""
     global _client, _db
     if not config.mongo_uri:
-        log.info("MONGO_URI not set \u2014 database features disabled.")
+        log.info("MONGO_URI not set — database features disabled.")
         return
     try:
         from motor.motor_asyncio import AsyncIOMotorClient
@@ -30,18 +30,7 @@ async def connect() -> None:
         _db = None
 
 
-async def disconnect() -> None:
-    """Close the MongoDB connection."""
-    global _client, _db
-    if _client:
-        _client.close()
-        _client = None
-        _db = None
-        log.info("MongoDB disconnected.")
-
-
 def get_db():
-    """Get the database instance, or None if not connected."""
     return _db
 
 

@@ -1,4 +1,4 @@
-"""Music handlers \u2014 m! prefix commands (V1.0.0).
+"""Music handlers — m! prefix commands (V1.1.0).
 
 Permission model:
 - m!p / m!play : any group member
@@ -27,267 +27,286 @@ log = logging.getLogger(__name__)
 
 def register(bot: Client, sessions: SessionManager) -> None:
 
-    # ----------------------------------------------------------------
-    # m!p / m!play
-    # ----------------------------------------------------------------
+    # ----------- Play -----------
+
     @bot.on_message(command("p", aliases=["play"]))
     async def play_handler(client: Client, message: Message) -> None:
         if message.chat.type == ChatType.PRIVATE:
             lang = await get_group_lang(message.chat.id)
             await message.reply(strings.get("PLAY_GROUPS_ONLY", lang))
             return
-        if not message.from_user:
+
+        user = message.from_user
+        if not user:
             return
+        lang = await get_group_lang(message.chat.id)
 
-        chat_id = message.chat.id
-        user_id = message.from_user.id
-        user_name = message.from_user.first_name or "User"
-        query = get_args(message).strip()
-        lang = await get_group_lang(chat_id)
-
-        if not query:
-            await message.reply(strings.get("PLAY_PROVIDE_QUERY", lang))
-            return
-
-        allowed, _ = await can_play(client, chat_id, user_id)
+        allowed, reason = await can_play(client, message.chat.id, user.id)
         if not allowed:
             await message.reply(strings.get("PLAY_NOT_ALLOWED", lang))
             return
 
-        session = sessions.get(chat_id)
-        status = await message.reply(strings.get("PLAY_SEARCHING", lang))
+        query = get_args(message)
+        if not query:
+            await message.reply(strings.get("PLAY_PROVIDE_QUERY", lang))
+            return
+
+        status_msg = await message.reply(strings.get("PLAY_SEARCHING", lang))
+
         try:
-            track = await search(query, requester_id=user_id, requester_name=user_name)
-            position = await session.add_and_play(track)
+            track = await search(query)
         except TrackNotFound:
-            await status.edit(strings.get("PLAY_NOT_FOUND", lang))
+            await status_msg.edit_text(strings.get("PLAY_NOT_FOUND", lang))
             return
         except ExtractionFailed:
-            await status.edit(strings.get("PLAY_EXTRACTION_FAILED", lang))
+            await status_msg.edit_text(strings.get("PLAY_EXTRACTION_FAILED", lang))
             return
-        except QueueFull as qf:
-            await status.edit(strings.get("PLAY_QUEUE_FULL", lang, error=str(qf)))
+        except SourceError as e:
+            await status_msg.edit_text(strings.get("PLAY_SOURCE_ERROR", lang, error=str(e)))
             return
-        except SourceError as se:
-            await status.edit(
-                strings.get("PLAY_SOURCE_ERROR", lang, error=str(se) or "Something went wrong.")
-            )
+
+        track.requester_id = user.id
+        track.requester_name = user.first_name
+
+        session = sessions.get(message.chat.id)
+
+        try:
+            position = await session.add_and_play(track)
+        except QueueFull as e:
+            await status_msg.edit_text(strings.get("PLAY_QUEUE_FULL", lang, error=str(e)))
             return
-        except Exception as exc:
-            log.exception("Play failed in %s: %s", chat_id, exc)
-            await status.edit(strings.get("PLAY_FAILED", lang))
+        except Exception as e:
+            log.exception("Play failed in %d: %s", message.chat.id, e)
+            await status_msg.edit_text(strings.get("PLAY_FAILED", lang))
             return
 
         if position == 0:
-            requester = "Autoplay" if track.is_autoplay else track.requester_name
-            await status.edit(
+            await status_msg.edit_text(
                 strings.get("NOW_PLAYING", lang,
-                             title=track.title, duration=track.duration_str,
-                             requester=requester)
+                            title=track.title,
+                            duration=track.duration_str,
+                            requester=track.requester_name)
             )
         else:
-            ap = "On" if session.autoplay_enabled else "Off"
-            await status.edit(
+            await status_msg.edit_text(
                 strings.get("ADDED_TO_QUEUE", lang,
-                             title=track.title, position=position, autoplay=ap)
+                            title=track.title,
+                            position=position,
+                            autoplay="On" if session.autoplay else "Off")
             )
 
-    # ----------------------------------------------------------------
-    # m!s / m!skip  \u2014 vote-based / force for admin+dev
-    # ----------------------------------------------------------------
+    # ----------- Skip -----------
+
     @bot.on_message(command("s", aliases=["skip"]))
     async def skip_handler(client: Client, message: Message) -> None:
-        if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        if message.chat.type == ChatType.PRIVATE:
             return
-        chat_id = message.chat.id
-        user_id = message.from_user.id
-        lang = await get_group_lang(chat_id)
-        session = sessions.get(chat_id)
+        user = message.from_user
+        if not user:
+            return
+        lang = await get_group_lang(message.chat.id)
 
-        if not session.is_active:
+        session = sessions.get_existing(message.chat.id)
+        if not session or not session.player.is_active:
             await message.reply(strings.get("SKIP_NOTHING", lang))
             return
 
-        # Force skip: developer or group admin
-        if is_developer(user_id) or await is_group_admin(client, chat_id, user_id):
-            next_track = await session.skip()
-            if next_track:
-                await message.reply(strings.get("SKIP_DONE", lang, title=next_track.title))
+        # Admin / developer: force skip
+        if is_developer(user.id) or await is_group_admin(client, message.chat.id, user.id):
+            nxt = await session.skip()
+            if nxt:
+                await message.reply(strings.get("SKIP_DONE", lang, title=nxt.title))
             else:
                 await message.reply(strings.get("SKIP_EMPTY", lang))
-                sessions.remove(chat_id)
             return
 
         # Vote skip
-        if session.votes.has_voted(chat_id, user_id):
+        from utils.vc import get_vc_participant_count
+        vc_count = await get_vc_participant_count(None, message.chat.id) if False else 2  # fallback
+        threshold = max(2, vc_count // 2)
+
+        if session.votes.has_voted(message.chat.id, user.id):
             await message.reply(strings.get("SKIP_VOTE_ALREADY", lang))
             return
 
-        votes = session.votes.add_vote(chat_id, user_id)
-        needed = await session.get_skip_threshold()
-
-        if votes >= needed:
+        count = session.votes.add_vote(message.chat.id, user.id)
+        if count >= threshold:
             await message.reply(strings.get("SKIP_VOTE_PASSED", lang))
-            next_track = await session.skip()
-            if next_track:
-                await message.reply(strings.get("SKIP_DONE", lang, title=next_track.title))
+            nxt = await session.skip()
+            if nxt:
+                await message.reply(strings.get("SKIP_DONE", lang, title=nxt.title))
             else:
                 await message.reply(strings.get("SKIP_EMPTY", lang))
-                sessions.remove(chat_id)
         else:
             await message.reply(
-                strings.get("SKIP_VOTE_ADDED", lang, votes=votes, needed=needed)
+                strings.get("SKIP_VOTE_ADDED", lang, votes=count, needed=threshold)
             )
 
-    # ----------------------------------------------------------------
-    # m!pause
-    # ----------------------------------------------------------------
+    # ----------- Pause / Resume -----------
+
     @bot.on_message(command("pause"))
     async def pause_handler(client: Client, message: Message) -> None:
-        if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        if message.chat.type == ChatType.PRIVATE:
             return
-        chat_id = message.chat.id
-        lang = await get_group_lang(chat_id)
-        session = sessions.get(chat_id)
-        allowed, _ = await can_control(client, chat_id, message.from_user.id)
+        user = message.from_user
+        if not user:
+            return
+        lang = await get_group_lang(message.chat.id)
+
+        allowed, _ = await can_control(client, message.chat.id, user.id)
         if not allowed:
             await message.reply(strings.get("PAUSE_ADMIN_ONLY", lang))
             return
-        if await session.pause():
-            await message.reply(strings.get("PAUSE_DONE", lang))
-        else:
-            await message.reply(strings.get("PAUSE_NOTHING", lang))
 
-    # ----------------------------------------------------------------
-    # m!resume
-    # ----------------------------------------------------------------
+        session = sessions.get_existing(message.chat.id)
+        if not session or not session.player.is_active:
+            await message.reply(strings.get("PAUSE_NOTHING", lang))
+            return
+
+        await session.pause()
+        await message.reply(strings.get("PAUSE_DONE", lang))
+
     @bot.on_message(command("resume"))
     async def resume_handler(client: Client, message: Message) -> None:
-        if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        if message.chat.type == ChatType.PRIVATE:
             return
-        chat_id = message.chat.id
-        lang = await get_group_lang(chat_id)
-        session = sessions.get(chat_id)
-        allowed, _ = await can_control(client, chat_id, message.from_user.id)
+        user = message.from_user
+        if not user:
+            return
+        lang = await get_group_lang(message.chat.id)
+
+        allowed, _ = await can_control(client, message.chat.id, user.id)
         if not allowed:
             await message.reply(strings.get("RESUME_ADMIN_ONLY", lang))
             return
-        if await session.resume():
-            await message.reply(strings.get("RESUME_DONE", lang))
-        else:
-            await message.reply(strings.get("RESUME_NOTHING", lang))
 
-    # ----------------------------------------------------------------
-    # m!np
-    # ----------------------------------------------------------------
-    @bot.on_message(command("np"))
+        session = sessions.get_existing(message.chat.id)
+        if not session:
+            await message.reply(strings.get("RESUME_NOTHING", lang))
+            return
+
+        await session.resume()
+        await message.reply(strings.get("RESUME_DONE", lang))
+
+    # ----------- Now Playing -----------
+
+    @bot.on_message(command("np", aliases=["nowplaying"]))
     async def np_handler(client: Client, message: Message) -> None:
         if message.chat.type == ChatType.PRIVATE:
             return
         lang = await get_group_lang(message.chat.id)
-        session = sessions.get(message.chat.id)
-        track = session.current
-        if track is None:
+
+        session = sessions.get_existing(message.chat.id)
+        if not session or not session.player.current_track:
             await message.reply(strings.get("NP_NOTHING", lang))
             return
-        requester = "Autoplay" if track.is_autoplay else track.requester_name
+
+        t = session.player.current_track
         await message.reply(
             strings.get("NP_DISPLAY", lang,
-                         title=track.title, duration=track.duration_str,
-                         requester=requester)
+                        title=t.title,
+                        duration=t.duration_str,
+                        requester=t.requester_name)
         )
 
-    # ----------------------------------------------------------------
-    # m!q / m!queue
-    # ----------------------------------------------------------------
+    # ----------- Queue -----------
+
     @bot.on_message(command("q", aliases=["queue"]))
     async def queue_handler(client: Client, message: Message) -> None:
         if message.chat.type == ChatType.PRIVATE:
             return
         lang = await get_group_lang(message.chat.id)
-        session = sessions.get(message.chat.id)
+
+        session = sessions.get_existing(message.chat.id)
+        if not session:
+            await message.reply(strings.get("QUEUE_EMPTY", lang))
+            return
+
         items = await session.queue.snapshot()
+        if not items and not session.player.current_track:
+            await message.reply(strings.get("QUEUE_EMPTY", lang))
+            return
 
         text = ""
-        track = session.current
-        if track:
-            text += strings.get("QUEUE_NOW_PLAYING", lang, title=track.title)
+        if session.player.current_track:
+            text += strings.get("QUEUE_NOW_PLAYING", lang,
+                                title=session.player.current_track.title)
 
-        if not items:
-            if not track:
-                await message.reply(strings.get("QUEUE_EMPTY", lang))
-                return
-            text += strings.get("QUEUE_EMPTY", lang)
-        else:
-            count = len(items)
-            s = "s" if count != 1 else ""
-            text += strings.get("QUEUE_HEADER", lang, count=count, s=s)
+        if items:
+            text += strings.get("QUEUE_HEADER", lang, count=len(items))
             for i, t in enumerate(items, 1):
                 text += strings.get("QUEUE_ITEM", lang,
-                                     pos=i, title=t.title, duration=t.duration_str)
+                                    pos=i, title=t.title, duration=t.duration_str)
+        elif not session.player.current_track:
+            text = strings.get("QUEUE_EMPTY", lang)
 
         await message.reply(text)
 
-    # ----------------------------------------------------------------
-    # m!stop
-    # ----------------------------------------------------------------
+    # ----------- Stop / Leave -----------
+
     @bot.on_message(command("stop"))
     async def stop_handler(client: Client, message: Message) -> None:
-        if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        if message.chat.type == ChatType.PRIVATE:
             return
-        chat_id = message.chat.id
-        lang = await get_group_lang(chat_id)
-        session = sessions.get(chat_id)
-        allowed, _ = await can_control(client, chat_id, message.from_user.id)
+        user = message.from_user
+        if not user:
+            return
+        lang = await get_group_lang(message.chat.id)
+
+        allowed, _ = await can_control(client, message.chat.id, user.id)
         if not allowed:
             await message.reply(strings.get("STOP_ADMIN_ONLY", lang))
             return
-        await session.stop()
-        sessions.remove(chat_id)
+
+        session = sessions.get_existing(message.chat.id)
+        if session:
+            await session.stop()
+            await sessions.remove(message.chat.id)
         await message.reply(strings.get("STOP_DONE", lang))
 
-    # ----------------------------------------------------------------
-    # m!leave
-    # ----------------------------------------------------------------
-    @bot.on_message(command("leave"))
+    @bot.on_message(command("leave", aliases=["disconnect"]))
     async def leave_handler(client: Client, message: Message) -> None:
-        if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        if message.chat.type == ChatType.PRIVATE:
             return
-        chat_id = message.chat.id
-        lang = await get_group_lang(chat_id)
-        session = sessions.get(chat_id)
-        allowed, _ = await can_control(client, chat_id, message.from_user.id)
+        user = message.from_user
+        if not user:
+            return
+        lang = await get_group_lang(message.chat.id)
+
+        allowed, _ = await can_control(client, message.chat.id, user.id)
         if not allowed:
             await message.reply(strings.get("LEAVE_ADMIN_ONLY", lang))
             return
-        if not session.is_active:
+
+        session = sessions.get_existing(message.chat.id)
+        if not session:
             await message.reply(strings.get("LEAVE_NOT_ACTIVE", lang))
             return
+
         await session.stop()
-        sessions.remove(chat_id)
+        await sessions.remove(message.chat.id)
         await message.reply(strings.get("LEAVE_DONE", lang))
 
-    # ----------------------------------------------------------------
-    # m!autoplay  \u2014 toggle
-    # ----------------------------------------------------------------
+    # ----------- Autoplay -----------
+
     @bot.on_message(command("autoplay"))
     async def autoplay_handler(client: Client, message: Message) -> None:
-        if message.chat.type == ChatType.PRIVATE or not message.from_user:
+        if message.chat.type == ChatType.PRIVATE:
             return
-        chat_id = message.chat.id
-        lang = await get_group_lang(chat_id)
-        session = sessions.get(chat_id)
-        allowed, _ = await can_control(client, chat_id, message.from_user.id)
+        user = message.from_user
+        if not user:
+            return
+        lang = await get_group_lang(message.chat.id)
+
+        allowed, _ = await can_control(client, message.chat.id, user.id)
         if not allowed:
             await message.reply(strings.get("AUTOPLAY_ADMIN_ONLY", lang))
             return
 
-        if session.autoplay_enabled:
-            session.autoplay_enabled = False
-            await message.reply(strings.get("AUTOPLAY_DISABLED", lang))
+        session = sessions.get(message.chat.id)
+        session.autoplay = not session.autoplay
+
+        if session.autoplay:
+            await message.reply(strings.get("AUTOPLAY_ENABLED", lang))
         else:
-            newly = await session.enable_autoplay()
-            if newly:
-                await message.reply(strings.get("AUTOPLAY_ENABLED", lang))
-            else:
-                await message.reply(strings.get("AUTOPLAY_ALREADY_ON", lang))
+            await message.reply(strings.get("AUTOPLAY_DISABLED", lang))

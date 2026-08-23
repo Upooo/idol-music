@@ -38,50 +38,32 @@ class Player:
         self.chat_id = chat_id
         self._calls = calls
         self._on_track_end = on_track_end
-        self.current: Track | None = None
         self._state = PlayerState.IDLE
         self._lock = asyncio.Lock()
-
-    # --- State properties (read-only from outside) ---
+        self.current_track: Track | None = None
 
     @property
     def state(self) -> PlayerState:
         return self._state
 
     @property
-    def is_playing(self) -> bool:
-        return self._state == PlayerState.PLAYING
-
-    @property
-    def is_paused(self) -> bool:
-        return self._state == PlayerState.PAUSED
-
-    @property
     def is_active(self) -> bool:
         return self._state in (PlayerState.PLAYING, PlayerState.PAUSED)
 
-    # --- Playback controls ---
-
     async def play(self, track: Track) -> None:
-        """Join VC (if needed) and start streaming a track."""
         async with self._lock:
-            self.current = track
-            self._state = PlayerState.PLAYING
-
+            # Force leave first to reset stale PyTgCalls state (fixes ghost VC after restart)
             try:
-                await self._calls.play(
-                    self.chat_id,
-                    MediaStream(
-                        track.url,
-                        video_flags=MediaStream.Flags.IGNORE,
-                    ),
-                )
-                log.info("Playing: %s in %d", track.title, self.chat_id)
-            except Exception as e:
-                log.exception("Failed to play in %d: %s", self.chat_id, e)
-                self._state = PlayerState.IDLE
-                self.current = None
-                raise
+                await self._calls.leave_call(self.chat_id)
+            except Exception:
+                pass
+            await asyncio.sleep(0.3)  # brief pause for Telegram to process
+
+            self.current_track = track
+            stream = MediaStream(track.url, video_flags=MediaStream.Flags.IGNORE)
+            await self._calls.play(self.chat_id, stream)
+            self._state = PlayerState.PLAYING
+            log.info("Playing in %d: %s", self.chat_id, track.title)
 
     async def pause(self) -> None:
         async with self._lock:
@@ -98,25 +80,24 @@ class Player:
             self._state = PlayerState.PLAYING
 
     async def stop(self) -> None:
-        """Stop playback and leave VC. Full reset."""
         async with self._lock:
+            if self._state == PlayerState.IDLE:
+                return
             self._state = PlayerState.STOPPING
-            self.current = None
             try:
                 await self._calls.leave_call(self.chat_id)
             except Exception:
-                pass  # already left or not in call
+                pass
+            self.current_track = None
             self._state = PlayerState.IDLE
 
     async def handle_stream_end(self) -> None:
-        """Called when PyTgCalls fires StreamEnded for this chat."""
+        """Called by PyTgCalls when stream finishes."""
         async with self._lock:
-            if self._state in (PlayerState.IDLE, PlayerState.STOPPING):
-                return  # Already handled or stop() in progress
-            log.info("Stream ended in %d", self.chat_id)
-            self.current = None
+            if self._state == PlayerState.STOPPING:
+                return
             self._state = PlayerState.IDLE
+            self.current_track = None
 
-        # Notify session OUTSIDE the lock so it can call play() again
         if self._on_track_end:
             await self._on_track_end(self.chat_id)

@@ -2,13 +2,13 @@
 
 # --- System ---
 START = (
-    "<b>IDOL Music</b> <code>v1.0.0</code>\n\n"
+    "<b>IDOL Music</b> <code>v1.1.0</code>\n\n"
     "Bot musik simple & stabil untuk voice chat Telegram.\n\n"
     "Ketik <code>m!help</code> untuk melihat daftar perintah."
 )
 
 HELP = (
-    "<b>IDOL Music</b> <code>v1.0.0</code>\n\n"
+    "<b>IDOL Music</b> <code>v1.1.0</code>\n\n"
     "<b>Musik</b>\n"
     "<code>m!p &lt;judul&gt;</code> / <code>m!play &lt;judul&gt;</code> \u2014 putar atau antri\n"
     "<code>m!s</code> / <code>m!skip</code> \u2014 skip (vote / admin)\n"
@@ -27,7 +27,7 @@ HELP = (
     "<b>Catatan</b>\n"
     "\u2022 Request manual selalu prioritas di atas autoplay.\n"
     "\u2022 Siapapun bisa vote skip; admin skip langsung.\n"
-    "\u2022 Bot otomatis keluar setelah 5 menit tanpa listener.\n"
+    "\u2022 Bot otomatis pause tanpa listener, keluar setelah 5 menit.\n"
     "\u2022 Maksimal 5 antrian manual saat autoplay aktif."
 )
 
@@ -37,7 +37,8 @@ HELP_DEV = (
     "<code>m!pull</code> \u2014 git pull\n"
     "<code>m!status</code> \u2014 uptime, sesi, info sistem\n"
     "<code>m!logs [n]</code> \u2014 lihat n baris log terakhir\n"
-    "<code>m!bc &lt;text&gt;</code> \u2014 broadcast ke grup aktif"
+    "<code>m!bc &lt;text&gt;</code> \u2014 broadcast ke grup aktif\n"
+    "<code>m!cookie</code> \u2014 lihat/ganti cookies.txt"
 )
 
 PING = "Pong! <code>{latency:.0f}ms</code>"
@@ -147,15 +148,29 @@ DEV_STATUS = (
     "<b>Status IDOL Music</b>\n"
     "Uptime: <code>{uptime}</code>\n"
     "Sesi aktif: <code>{sessions}</code>\n"
+    "Total plays: <code>{total_plays}</code>\n"
     "Python: <code>{python}</code>\n"
-    "MongoDB: <code>{mongo}</code>"
+    "MongoDB: <code>{mongo}</code>\n"
+    "Cookies: <code>{cookies}</code>"
 )
 DEV_LOGS_USAGE = "Gunakan: <code>m!logs [n]</code> \u2014 tampilkan n baris terakhir (default 50)."
 DEV_LOGS_EMPTY = "File log tidak ditemukan."
 
+# --- Cookie Management ---
+DEV_COOKIE_STATUS = "Cookies: <code>{size}</code> bytes, <code>{lines}</code> lines."
+DEV_COOKIE_NOT_FOUND = "Tidak ada cookies.txt. Reply ke pesan berisi cookie content atau kirim <code>m!cookie &lt;content&gt;</code>."
+DEV_COOKIE_UPDATED = "Cookies diperbarui. <code>{lines}</code> baris ditulis."
+
 # --- Log Group ---
-LOG_STARTED = "\U0001f7e2 <b>IDOL Music dimulai</b>\nBot: @{username}\nSesi: {sessions}"
+LOG_STARTED = (
+    "\U0001f7e2 <b>IDOL Music dimulai</b>\n"
+    "Bot: @{username}\n"
+    "Sesi: {sessions}\n"
+    "MongoDB: {mongo}\n"
+    "Cookies: {cookies}"
+)
 LOG_STOPPED = "\U0001f534 <b>IDOL Music berhenti</b> (restart diminta)"
 LOG_ERROR = "\u26a0\ufe0f <b>Error di {location}</b>\n<code>{error}</code>"
 LOG_SESSION_JOIN = "\U0001f3b5 Bergabung VC di <code>{chat_id}</code>"
 LOG_SESSION_LEAVE = "\U0001f507 Keluar VC dari <code>{chat_id}</code>"
+LOG_COOKIE_UPDATED = "\U0001f36a Cookies diperbarui via bot command. {lines} baris."

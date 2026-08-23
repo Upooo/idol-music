@@ -1,8 +1,9 @@
-"""MusicSession \u2014 one independent session per group.
+"""MusicSession — one independent session per group.
 
 Manual requests have priority over autoplay.
 Max 5 pending manual requests; reaching the limit disables autoplay.
 Auto-leave after 5 minutes with no listeners.
+Pauses when 0 listeners, resumes when someone joins back.
 Bot leaves VC when queue is empty and autoplay is off.
 """
 from __future__ import annotations
@@ -36,245 +37,207 @@ class MusicSession:
         self,
         chat_id: int,
         calls: "PyTgCalls",
-        assistant: "Optional[Client]" = None,
-        on_auto_leave: "Optional[Callable[[int], Awaitable[None]]]" = None,
+        assistant: "Client" = None,
+        on_auto_leave: Optional[Callable[[int], Awaitable[None]]] = None,
     ) -> None:
         self.chat_id = chat_id
-        self.queue = MusicQueue(max_size=MAX_MANUAL_QUEUE)
-        self.player = Player(
-            chat_id=chat_id,
-            calls=calls,
-            on_track_end=self._on_track_end,
-        )
+        self._calls = calls
         self._assistant = assistant
-        self._on_auto_leave = on_auto_leave
-        self.autoplay_enabled = False
-        self._autoplay_failures = 0
-        self._last_title: Optional[str] = None
-        self._end_lock = asyncio.Lock()
-        self._play_history: Set[str] = set()
+        self.player = Player(chat_id, calls, on_track_end=self._on_track_end)
+        self.queue = MusicQueue(max_size=MAX_MANUAL_QUEUE)
         self.votes = VoteTracker()
-
-        self._no_listeners_since: Optional[float] = None
+        self.autoplay = False
+        self._autoplay_failures = 0
+        self._played_artists: Set[str] = set()
+        self._on_auto_leave = on_auto_leave
         self._auto_leave_task: Optional[asyncio.Task] = None
+        self._no_listener_since: Optional[float] = None
+        self._end_lock = asyncio.Lock()
+        self._paused_by_listener_check = False
+        self._listener_count = -1  # unknown
 
-    # ----------------------------------------------------------------
-    # Public API
-    # ----------------------------------------------------------------
+    # --- Public API ---
 
     async def add_and_play(self, track: Track) -> int:
+        """Add track. Returns 0 if playing now, else queue position."""
         if not self.player.is_active:
             await self.player.play(track)
-            self._last_title = track.title
-            self._record_play(track)
             self.votes.clear(self.chat_id)
             self._start_auto_leave_checker()
+            await self._db_session_join()
+            await self._db_log_play(track)
             return 0
-
-        if await self.queue.is_full():
-            was = self.autoplay_enabled
-            self.autoplay_enabled = False
-            msg = f"Manual queue is full (max {MAX_MANUAL_QUEUE})."
-            if was:
-                msg += " Autoplay has been disabled."
-            raise QueueFull(msg)
-
-        return await self.queue.put(track)
+        pos = await self.queue.put(track)
+        return pos
 
     async def skip(self) -> Optional[Track]:
         self.votes.clear(self.chat_id)
-        next_track = await self.queue.get()
-        if next_track is not None:
-            await self.player.play(next_track)
-            self._last_title = next_track.title
-            self._record_play(next_track)
-            return next_track
-
-        if self.autoplay_enabled:
-            track = await self._try_autoplay()
-            if track is not None:
-                return track
-
-        await self.player.stop()
+        nxt = await self.queue.pop()
+        if nxt:
+            await self.player.play(nxt)
+            await self._db_log_play(nxt)
+            return nxt
+        if self.autoplay:
+            ap = await self._get_autoplay_track()
+            if ap:
+                await self.player.play(ap)
+                await self._db_log_play(ap)
+                return ap
+        await self.stop()
         return None
+
+    async def pause(self) -> None:
+        await self.player.pause()
+
+    async def resume(self) -> None:
+        self._paused_by_listener_check = False
+        await self.player.resume()
 
     async def stop(self) -> None:
         self._stop_auto_leave_checker()
-        await self.queue.clear()
-        self.autoplay_enabled = False
-        self._autoplay_failures = 0
-        self._last_title = None
-        self._play_history.clear()
-        self.votes.clear(self.chat_id)
         await self.player.stop()
-        log.info("Session stopped/reset for chat %s", self.chat_id)
-
-    async def pause(self) -> bool:
-        if not self.player.is_playing:
-            return False
-        await self.player.pause()
-        return self.player.is_paused
-
-    async def resume(self) -> bool:
-        if not self.player.is_paused:
-            return False
-        await self.player.resume()
-        return self.player.is_playing
-
-    async def enable_autoplay(self) -> bool:
-        if self.autoplay_enabled:
-            return False
-        self.autoplay_enabled = True
+        await self.queue.clear()
+        self.votes.clear(self.chat_id)
+        self.autoplay = False
         self._autoplay_failures = 0
-        log.info("Autoplay enabled for chat %s", self.chat_id)
-        if not self.player.is_active:
-            await self._try_autoplay()
-            if self.player.is_active:
-                self._start_auto_leave_checker()
-        return True
+        self._played_artists.clear()
+        self._paused_by_listener_check = False
+        await self._db_session_leave()
 
-    @property
-    def current(self) -> Optional[Track]:
-        return self.player.current
+    async def handle_track_end(self) -> None:
+        async with self._end_lock:
+            await self.player.handle_stream_end()
+            nxt = await self.queue.pop()
+            if nxt:
+                await self.player.play(nxt)
+                self.votes.clear(self.chat_id)
+                await self._db_log_play(nxt)
+                return
+            if self.autoplay:
+                ap = await self._get_autoplay_track()
+                if ap:
+                    await self.player.play(ap)
+                    self.votes.clear(self.chat_id)
+                    await self._db_log_play(ap)
+                    return
+            await self.stop()
 
-    @property
-    def is_active(self) -> bool:
-        return self.player.is_active
-
-    # ----------------------------------------------------------------
-    # Vote skip helpers
-    # ----------------------------------------------------------------
-
-    async def get_skip_threshold(self) -> int:
-        count = await self._get_vc_count()
-        if count <= 0:
-            return DEFAULT_VOTE_THRESHOLD
-        return max(1, math.ceil(count / 2))
-
-    async def _get_vc_count(self) -> int:
-        if self._assistant is None:
-            return -1
+    def update_listeners(self, update) -> None:
+        """Called on PyTgCalls participant change."""
         try:
-            from utils.vc import get_vc_participant_count
-            return await get_vc_participant_count(self._assistant, self.chat_id)
+            count = getattr(update, 'participant_count', -1)
+            if count >= 0:
+                # subtract 1 for the assistant itself
+                self._listener_count = max(0, count - 1)
         except Exception:
-            return -1
+            pass
 
-    # ----------------------------------------------------------------
-    # Auto-leave checker
-    # ----------------------------------------------------------------
+    # --- Listener-based pause/resume ---
 
     def _start_auto_leave_checker(self) -> None:
-        if self._auto_leave_task is not None and not self._auto_leave_task.done():
-            return
-        self._no_listeners_since = None
+        self._stop_auto_leave_checker()
+        self._no_listener_since = None
         self._auto_leave_task = asyncio.create_task(self._auto_leave_loop())
 
     def _stop_auto_leave_checker(self) -> None:
-        if self._auto_leave_task is not None:
+        if self._auto_leave_task and not self._auto_leave_task.done():
             self._auto_leave_task.cancel()
-            self._auto_leave_task = None
-        self._no_listeners_since = None
+        self._auto_leave_task = None
+        self._no_listener_since = None
 
     async def _auto_leave_loop(self) -> None:
         try:
             while True:
                 await asyncio.sleep(AUTO_LEAVE_CHECK_INTERVAL)
                 if not self.player.is_active:
-                    break
-
-                count = await self._get_vc_count()
-                if count == -1:
-                    self._no_listeners_since = None
                     continue
 
+                count = await self._get_listener_count()
+
                 if count == 0:
-                    if self._no_listeners_since is None:
-                        self._no_listeners_since = time.time()
-                        log.info("No listeners in %s \u2014 timer started", self.chat_id)
-                    elif time.time() - self._no_listeners_since >= AUTO_LEAVE_TIMEOUT:
-                        log.info("Auto-leaving %s (no listeners for %ds)",
-                                 self.chat_id, AUTO_LEAVE_TIMEOUT)
-                        await self.stop()
+                    if self._no_listener_since is None:
+                        self._no_listener_since = time.time()
+                        # Pause playback when no listeners
+                        if self.player.state.value == "playing" and not self._paused_by_listener_check:
+                            await self.player.pause()
+                            self._paused_by_listener_check = True
+                            log.info("Paused in %d: no listeners", self.chat_id)
+
+                    elapsed = time.time() - self._no_listener_since
+                    if elapsed >= AUTO_LEAVE_TIMEOUT:
+                        log.info("Auto-leaving %d after %ds no listeners", self.chat_id, int(elapsed))
                         if self._on_auto_leave:
                             await self._on_auto_leave(self.chat_id)
-                        break
+                        await self.stop()
+                        return
                 else:
-                    if self._no_listeners_since is not None:
-                        log.info("Listeners back in %s \u2014 timer reset", self.chat_id)
-                    self._no_listeners_since = None
+                    # Listeners came back — resume if we paused
+                    if self._paused_by_listener_check:
+                        await self.player.resume()
+                        self._paused_by_listener_check = False
+                        log.info("Resumed in %d: listeners returned", self.chat_id)
+                    self._no_listener_since = None
+
         except asyncio.CancelledError:
             pass
         except Exception as exc:
-            log.error("Auto-leave loop error in %s: %s", self.chat_id, exc)
+            log.exception("Auto-leave loop error in %d: %s", self.chat_id, exc)
 
-    # ----------------------------------------------------------------
-    # Stream-end / autoplay internals
-    # ----------------------------------------------------------------
+    async def _get_listener_count(self) -> int:
+        if self._listener_count >= 0:
+            return self._listener_count
+        # Fallback: use raw API
+        if self._assistant:
+            try:
+                from utils.vc import get_vc_participant_count
+                count = await get_vc_participant_count(self._assistant, self.chat_id)
+                return count if count >= 0 else 0
+            except Exception:
+                pass
+        return -1  # unknown
 
-    def _record_play(self, track: Track) -> None:
-        if track.url:
-            self._play_history.add(track.url)
-        if len(self._play_history) > 50:
-            keep = list(self._play_history)[-30:]
-            self._play_history = set(keep)
+    # --- Autoplay ---
 
-    async def _on_track_end(self, chat_id: int) -> None:
-        async with self._end_lock:
-            self.votes.clear(self.chat_id)
-            log.info("Track ended in %s \u2014 advancing", chat_id)
-            next_manual = await self.queue.get()
-            if next_manual is not None:
-                await self.player.play(next_manual)
-                self._last_title = next_manual.title
-                self._record_play(next_manual)
-                return
-
-            if self.autoplay_enabled:
-                track = await self._try_autoplay()
-                if track is not None:
-                    return
-
-            # Nothing left \u2014 leave VC
-            log.info("Nothing left in %s \u2014 leaving VC", chat_id)
-            await self.player.stop()
-            if self._on_auto_leave:
-                await self._on_auto_leave(chat_id)
-
-    async def _try_autoplay(self) -> Optional[Track]:
-        try:
-            from music.source import search_autoplay
-        except ImportError:
-            log.warning("music.source not available \u2014 autoplay skipped")
-            self.autoplay_enabled = False
-            await self.player.stop()
+    async def _get_autoplay_track(self) -> Optional[Track]:
+        if self._autoplay_failures >= AUTOPLAY_MAX_FAILURES:
+            log.warning("Autoplay disabled in %d: too many failures", self.chat_id)
+            self.autoplay = False
             return None
-
-        seed = self._last_title or "music"
-        track = await search_autoplay(seed, played_urls=self._play_history)
-        if track is None:
-            self._autoplay_failures += 1
-            log.warning(
-                "Autoplay failure %s/%s in %s",
-                self._autoplay_failures,
-                AUTOPLAY_MAX_FAILURES,
-                self.chat_id,
-            )
-            if self._autoplay_failures >= AUTOPLAY_MAX_FAILURES:
-                self.autoplay_enabled = False
-                await self.player.stop()
-            return None
-
-        self._autoplay_failures = 0
         try:
-            await self.player.play(track)
-            self._last_title = track.title
-            self._record_play(track)
-            return track
+            from music.source import search
+            from music.artists import get_random_query
+            query, artist = get_random_query(self._played_artists)
+            track = await search(query)
+            if track:
+                track.is_autoplay = True
+                track.requester_name = "Autoplay"
+                self._played_artists.add(artist)
+                self._autoplay_failures = 0
+                return track
         except Exception as exc:
-            log.error("Failed to play autoplay track: %s", exc)
-            self._autoplay_failures += 1
-            if self._autoplay_failures >= AUTOPLAY_MAX_FAILURES:
-                self.autoplay_enabled = False
-            await self.player.stop()
-            return None
+            log.warning("Autoplay search failed in %d: %s", self.chat_id, exc)
+        self._autoplay_failures += 1
+        return None
+
+    # --- MongoDB helpers ---
+
+    async def _db_log_play(self, track: Track) -> None:
+        try:
+            from db.models import log_play
+            await log_play(self.chat_id, track)
+        except Exception as exc:
+            log.debug("DB log_play failed: %s", exc)
+
+    async def _db_session_join(self) -> None:
+        try:
+            from db.models import session_join
+            await session_join(self.chat_id)
+        except Exception as exc:
+            log.debug("DB session_join failed: %s", exc)
+
+    async def _db_session_leave(self) -> None:
+        try:
+            from db.models import session_leave
+            await session_leave(self.chat_id)
+        except Exception as exc:
+            log.debug("DB session_leave failed: %s", exc)
