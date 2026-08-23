@@ -32,7 +32,7 @@ async def main() -> None:
     # --- MongoDB ---
     await db_client.connect()
 
-    # Auto-leave callback
+    # Auto-leave / track-end callback
     async def on_auto_leave(chat_id: int) -> None:
         lang = await get_group_lang(chat_id)
         try:
@@ -58,7 +58,7 @@ async def main() -> None:
         await sess.player.handle_stream_end()
 
     # --- Pyrogram bot handlers ---
-    system.register(bot)
+    system.register(bot, sessions)
     music.register(bot, sessions)
     developer.register(bot, sessions, assistant, calls)
 

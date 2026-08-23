@@ -22,12 +22,22 @@ HELP = (
     "<b>Sistem</b>\n"
     "<code>m!help</code> \u2014 pesan ini\n"
     "<code>m!ping</code> \u2014 latensi\n"
-    "<code>m!lang [en|id]</code> \u2014 ubah bahasa\n\n"
+    "<code>m!lang [en|id]</code> \u2014 ubah bahasa\n"
+    "<code>m!cv</code> \u2014 cek listener voice chat\n\n"
     "<b>Catatan</b>\n"
     "\u2022 Request manual selalu prioritas di atas autoplay.\n"
     "\u2022 Siapapun bisa vote skip; admin skip langsung.\n"
     "\u2022 Bot otomatis keluar setelah 5 menit tanpa listener.\n"
     "\u2022 Maksimal 5 antrian manual saat autoplay aktif."
+)
+
+HELP_DEV = (
+    "<b>Developer</b>\n"
+    "<code>m!restart</code> \u2014 restart bot\n"
+    "<code>m!pull</code> \u2014 git pull\n"
+    "<code>m!status</code> \u2014 uptime, sesi, info sistem\n"
+    "<code>m!logs [n]</code> \u2014 lihat n baris log terakhir\n"
+    "<code>m!bc &lt;text&gt;</code> \u2014 broadcast ke grup aktif"
 )
 
 PING = "Pong! <code>{latency:.0f}ms</code>"
@@ -110,6 +120,14 @@ LANG_CURRENT = "Bahasa saat ini: <code>{lang}</code>"
 LANG_SET = "Bahasa diubah ke <code>{lang}</code>."
 LANG_INVALID = "Bahasa tidak valid. Tersedia: {languages}"
 LANG_ADMIN_ONLY = "Hanya admin grup yang bisa mengubah bahasa."
+
+# --- Check Voice ---
+CV_ADMIN_ONLY = "Hanya admin grup yang bisa menggunakan perintah ini."
+CV_CHECKING = "Mengecek voice chat\u2026"
+CV_RESULT = "\U0001f3a7 Listener di voice chat: <code>{count}</code>"
+CV_EMPTY = "\U0001f507 Tidak ada listener di voice chat (hanya assistant)."
+CV_UNAVAILABLE = "\u26a0\ufe0f Tidak bisa membaca peserta voice chat."
+CV_ERROR = "\u274c Error: <code>{error}</code>"
 
 # --- Auto-leave ---
 AUTO_LEAVE = "Tidak ada listener selama 5 menit. Keluar dari voice chat."

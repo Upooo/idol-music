@@ -3,6 +3,7 @@
 Manual requests have priority over autoplay.
 Max 5 pending manual requests; reaching the limit disables autoplay.
 Auto-leave after 5 minutes with no listeners.
+Bot leaves VC when queue is empty and autoplay is off.
 """
 from __future__ import annotations
 
@@ -54,7 +55,6 @@ class MusicSession:
         self._play_history: Set[str] = set()
         self.votes = VoteTracker()
 
-        # Auto-leave
         self._no_listeners_since: Optional[float] = None
         self._auto_leave_task: Optional[asyncio.Task] = None
 
@@ -146,7 +146,6 @@ class MusicSession:
     # ----------------------------------------------------------------
 
     async def get_skip_threshold(self) -> int:
-        """Calculate skip vote threshold based on VC listeners."""
         count = await self._get_vc_count()
         if count <= 0:
             return DEFAULT_VOTE_THRESHOLD
@@ -236,8 +235,11 @@ class MusicSession:
                 if track is not None:
                     return
 
-            log.info("Nothing left in %s \u2014 stopping", chat_id)
+            # Nothing left \u2014 leave VC
+            log.info("Nothing left in %s \u2014 leaving VC", chat_id)
             await self.player.stop()
+            if self._on_auto_leave:
+                await self._on_auto_leave(chat_id)
 
     async def _try_autoplay(self) -> Optional[Track]:
         try:

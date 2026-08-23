@@ -22,12 +22,22 @@ HELP = (
     "<b>System</b>\n"
     "<code>m!help</code> \u2014 this message\n"
     "<code>m!ping</code> \u2014 latency\n"
-    "<code>m!lang [en|id]</code> \u2014 set language\n\n"
+    "<code>m!lang [en|id]</code> \u2014 set language\n"
+    "<code>m!cv</code> \u2014 check voice chat listeners\n\n"
     "<b>Notes</b>\n"
     "\u2022 Manual requests always have priority over autoplay.\n"
     "\u2022 Anyone can vote to skip; admins skip instantly.\n"
     "\u2022 Bot auto-leaves after 5 min with no listeners.\n"
     "\u2022 Max 5 pending manual requests while autoplay is active."
+)
+
+HELP_DEV = (
+    "<b>Developer</b>\n"
+    "<code>m!restart</code> \u2014 graceful restart\n"
+    "<code>m!pull</code> \u2014 git pull\n"
+    "<code>m!status</code> \u2014 uptime, sessions, system info\n"
+    "<code>m!logs [n]</code> \u2014 tail last n log lines\n"
+    "<code>m!bc &lt;text&gt;</code> \u2014 broadcast to active chats"
 )
 
 PING = "Pong! <code>{latency:.0f}ms</code>"
@@ -110,6 +120,14 @@ LANG_CURRENT = "Current language: <code>{lang}</code>"
 LANG_SET = "Language set to <code>{lang}</code>."
 LANG_INVALID = "Invalid language. Available: {languages}"
 LANG_ADMIN_ONLY = "Only group admins can change the language."
+
+# --- Check Voice ---
+CV_ADMIN_ONLY = "Only group admins can use this command."
+CV_CHECKING = "Checking voice chat\u2026"
+CV_RESULT = "\U0001f3a7 Listeners in voice chat: <code>{count}</code>"
+CV_EMPTY = "\U0001f507 No listeners in voice chat (only assistant)."
+CV_UNAVAILABLE = "\u26a0\ufe0f Unable to read voice chat participants."
+CV_ERROR = "\u274c Error: <code>{error}</code>"
 
 # --- Auto-leave ---
 AUTO_LEAVE = "No listeners for 5 minutes. Leaving voice chat."
